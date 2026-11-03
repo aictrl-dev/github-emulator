@@ -1,10 +1,9 @@
-import { randomBytes } from "node:crypto";
-import { escapeAttr, escapeHtml, renderCardPage, renderErrorPage, type RouteContext } from "@emulators/core";
+import { randomBytes } from "crypto";
+import type { RouteContext } from "@emulators/core";
+import { escapeAttr, escapeHtml, renderCardPage, renderErrorPage } from "@emulators/core";
 import { getGitHubStore } from "../store.js";
-import { formatUser } from "../helpers.js";
-import { formatInstallation } from "./apps.js";
-import { orgRoleForUser } from "./orgs.js";
-import { resolveBrowserSessionUser } from "./oauth.js";
+import { formatUser, formatInstallation, formatRepoBrief, reposForAccount } from "../helpers.js";
+import { orgRoleForUser, resolveBrowserSessionUser } from "../route-helpers.js";
 
 type Account = { id: number; login: string; type: "User" | "Organization" };
 type PendingInstallation = {
@@ -14,6 +13,9 @@ type PendingInstallation = {
   state: string;
   createdAt: number;
 };
+const SERVICE_LABEL = "GitHub";
+const MAX_PENDING_FORMS_PER_USER = 32;
+const MAX_PENDING_FORMS = 1024;
 const FORM_TTL_MS = 10 * 60 * 1000;
 
 export function appInstallationFlowRoutes({ app, store, baseUrl, webhooks }: RouteContext): void {
@@ -39,7 +41,7 @@ export function appInstallationFlowRoutes({ app, store, baseUrl, webhooks }: Rou
         .map((org) => ({ id: org.id, login: org.login, type: "Organization" as const })),
     ];
   }
-  const error = (title: string, message: string) => renderErrorPage(title, message, "GitHub");
+  const error = (title: string, message: string) => renderErrorPage(title, message, SERVICE_LABEL);
 
   app.get("/apps/:slug/installations/new", (c) => {
     const user = resolveBrowserSessionUser(store, c);
@@ -57,15 +59,21 @@ export function appInstallationFlowRoutes({ app, store, baseUrl, webhooks }: Rou
           return `<a class="app-link" href="${escapeAttr(`${path}?${params}`)}">Install on ${escapeHtml(account.login)}</a>`;
         })
         .join("\n");
-      return c.html(renderCardPage(`Install ${ghApp.name}`, "Choose an account for this application.", body, "GitHub"));
+      return c.html(
+        renderCardPage(`Install ${ghApp.name}`, "Choose an account for this application.", body, SERVICE_LABEL),
+      );
     }
     const account = allowedAccounts.find((candidate) => candidate.login === selectedLogin);
     if (!account) return c.html(error("Forbidden", "You cannot install an application on this account."), 403);
     const nonce = randomBytes(24).toString("base64url");
-    forms().set(nonce, { userId: user.id, appId: ghApp.app_id, account, state, createdAt: Date.now() });
-    const repositories = gh.repos
-      .all()
-      .filter((repo) => repo.owner_id === account.id && repo.owner_type === account.type);
+    const pendingForms = forms();
+    const userForms = [...pendingForms].filter(([, form]) => form.userId === user.id);
+    for (const [oldest] of userForms.slice(0, Math.max(0, userForms.length - MAX_PENDING_FORMS_PER_USER + 1))) {
+      pendingForms.delete(oldest);
+    }
+    while (pendingForms.size >= MAX_PENDING_FORMS) pendingForms.delete(pendingForms.keys().next().value!);
+    pendingForms.set(nonce, { userId: user.id, appId: ghApp.app_id, account, state, createdAt: Date.now() });
+    const repositories = reposForAccount(gh, account.id, account.type);
     const repositoryFields = repositories
       .map(
         (repo) =>
@@ -73,14 +81,16 @@ export function appInstallationFlowRoutes({ app, store, baseUrl, webhooks }: Rou
       )
       .join("\n");
     const body = `<form method="post" action="${escapeAttr(path)}">
-      <input type="hidden" name="nonce" value="${nonce}">
+      <input type="hidden" name="nonce" value="${escapeAttr(nonce)}">
       <input type="hidden" name="account" value="${escapeAttr(account.login)}">
       <label class="org-row"><input type="radio" name="repository_selection" value="all" checked>All repositories</label>
       <label class="org-row"><input type="radio" name="repository_selection" value="selected">Only select repositories</label>
       ${repositoryFields}
       <button class="user-btn" type="submit">Install</button>
     </form>`;
-    return c.html(renderCardPage(`Install ${ghApp.name}`, `Install on ${escapeHtml(account.login)}.`, body, "GitHub"));
+    return c.html(
+      renderCardPage(`Install ${ghApp.name}`, `Install on ${escapeHtml(account.login)}.`, body, SERVICE_LABEL),
+    );
   });
 
   app.post("/apps/:slug/installations/new", async (c) => {
@@ -124,9 +134,7 @@ export function appInstallationFlowRoutes({ app, store, baseUrl, webhooks }: Rou
           ? body.repository_ids
           : [body.repository_ids];
     const repoIds = [...new Set(rawIds.map((id) => (typeof id === "string" && /^\d+$/.test(id) ? Number(id) : NaN)))];
-    const repositories = gh.repos
-      .all()
-      .filter((repo) => repo.owner_id === account.id && repo.owner_type === account.type);
+    const repositories = reposForAccount(gh, account.id, account.type);
     if (
       (selection !== "all" && selection !== "selected") ||
       repoIds.some((id) => !repositories.some((repo) => repo.id === id)) ||
@@ -136,6 +144,16 @@ export function appInstallationFlowRoutes({ app, store, baseUrl, webhooks }: Rou
     }
     const installationId =
       Math.max(0, ...gh.appInstallations.all().map((installation) => installation.installation_id)) + 1;
+    let callback = new URL(`${baseUrl}/settings/installations/${installationId}`);
+    try {
+      const configured = new URL(ghApp.setup_url ?? "");
+      if (configured.protocol === "http:" || configured.protocol === "https:") callback = configured;
+    } catch {
+      // Invalid callback configuration falls back before the installation is saved.
+    }
+    callback.searchParams.set("installation_id", String(installationId));
+    callback.searchParams.set("setup_action", "install");
+    callback.searchParams.set("state", pending.state);
     const installation = gh.appInstallations.insert({
       installation_id: installationId,
       app_id: ghApp.app_id,
@@ -155,21 +173,11 @@ export function appInstallationFlowRoutes({ app, store, baseUrl, webhooks }: Rou
       {
         action: "created",
         installation: formatInstallation(installation, ghApp, baseUrl, gh),
-        repositories: selectedRepos.map((repo) => ({
-          id: repo.id,
-          node_id: repo.node_id,
-          name: repo.name,
-          full_name: repo.full_name,
-          private: repo.private,
-        })),
+        repositories: selectedRepos.map(formatRepoBrief),
         sender: formatUser(gh.users.get(user.id)!, baseUrl),
       },
       account.login,
     );
-    const callback = new URL(ghApp.setup_url ?? `${baseUrl}/settings/installations/${installationId}`);
-    callback.searchParams.set("installation_id", String(installationId));
-    callback.searchParams.set("setup_action", "install");
-    callback.searchParams.set("state", pending.state);
     return c.redirect(callback.toString(), 302);
   });
 }

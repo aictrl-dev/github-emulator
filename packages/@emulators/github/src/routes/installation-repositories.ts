@@ -1,8 +1,7 @@
 import type { RouteContext } from "@emulators/core";
 import { forbidden, parsePagination, setLinkHeader, unauthorized } from "@emulators/core";
-import { formatRepo } from "../helpers.js";
+import { formatRepo, formatInstallation, reposForAccount } from "../helpers.js";
 import { getGitHubStore } from "../store.js";
-import { formatInstallation } from "./apps.js";
 
 export function installationRepositoriesRoutes({ app, store, baseUrl }: RouteContext): void {
   const gh = getGitHubStore(store);
@@ -23,8 +22,7 @@ export function installationRepositoriesRoutes({ app, store, baseUrl }: RouteCon
       throw forbidden();
     }
 
-    const repositories = gh.repos.all().filter((repo) => {
-      if (repo.owner_id !== installation.account_id || repo.owner_type !== installation.account_type) return false;
+    const repositories = reposForAccount(gh, installation.account_id, installation.account_type).filter((repo) => {
       if (installation.repository_selection === "selected" && !installation.repository_ids.includes(repo.id))
         return false;
       return tokenInstallation.repositorySelection === "all" || tokenInstallation.repositoryIds.includes(repo.id);

@@ -11,11 +11,11 @@ import {
   renderUserButton,
   matchesRedirectUri,
   constantTimeSecretEqual,
-  parseCookies,
   debug,
 } from "@emulators/core";
 import { getGitHubStore } from "../store.js";
 import { formatUser, formatUserFull } from "../helpers.js";
+import { getBrowserSessionMap, resolveBrowserSessionUser } from "../route-helpers.js";
 
 type PendingCode = {
   login: string;
@@ -43,23 +43,6 @@ function getTokenToClientId(store: Store): Map<string, string> {
     store.setData("github.oauth.tokenToClientId", map);
   }
   return map;
-}
-
-function getSessionMap(store: Store): Map<string, string> {
-  let map = store.getData<Map<string, string>>("github.oauth.sessionMap");
-  if (!map) {
-    map = new Map();
-    store.setData("github.oauth.sessionMap", map);
-  }
-  return map;
-}
-
-/** Resolve browser identity from the same session established by OAuth sign-in. */
-export function resolveBrowserSessionUser(store: Store, c: Context<AppEnv>): { login: string; id: number } | null {
-  const sessionId = parseCookies(c.req.header("Cookie") ?? "")["_emu_session"];
-  const login = sessionId ? getSessionMap(store).get(sessionId) : undefined;
-  const user = login ? getGitHubStore(store).users.findOneBy("login", login) : undefined;
-  return user ? { login: user.login, id: user.id } : null;
 }
 
 /** On read: drops entries older than {@link PENDING_CODE_TTL_MS}. */
@@ -179,7 +162,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     );
 
     const sessionId = randomBytes(24).toString("base64url");
-    getSessionMap(store).set(sessionId, login);
+    getBrowserSessionMap(store).set(sessionId, login);
     c.header("Set-Cookie", `_emu_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax`);
 
     const sep = redirect_uri.includes("?") ? "&" : "?";

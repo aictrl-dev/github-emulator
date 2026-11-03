@@ -1,16 +1,17 @@
 import { createHmac } from "node:crypto";
 import { createServer, type Server } from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono, Store, WebhookDispatcher, authMiddleware, createApiErrorHandler, type TokenMap } from "@emulators/core";
 import { githubPlugin, getGitHubStore, seedFromConfig } from "../index.js";
 
 const base = "http://localhost:4200";
 const servers: Server[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
 });
 
-function fixture(webhookUrl?: string) {
+function fixture(webhookUrl?: string, setupUrl = "https://client.example/setup?keep=1") {
   const store = new Store();
   const tokens: TokenMap = new Map();
   const app = new Hono();
@@ -37,7 +38,7 @@ function fixture(webhookUrl?: string) {
         slug: "example-app",
         name: "Example App",
         private_key: "fixture-key",
-        setup_url: "https://client.example/setup?keep=1",
+        setup_url: setupUrl,
         webhook_url: webhookUrl,
         webhook_secret: "fixture-webhook-secret",
         events: ["installation"],
@@ -230,5 +231,156 @@ describe("GitHub App browser installation", () => {
       expect((await submit(f, cookie, data)).status).toBe(422);
     }
     expect(f.gh.appInstallations.all()).toHaveLength(0);
+  });
+});
+
+describe("installation form lifetime and callback recovery", () => {
+  it("evicts the oldest of more than 32 forms for one user while preserving another user's form", async () => {
+    const f = fixture();
+    const cookie = await session(f);
+    const otherCookie = await session(f, "other");
+    const otherForm = await form(f, otherCookie, "other");
+    const tabs = [];
+    for (let index = 0; index < 33; index++) {
+      tabs.push(await form(f, cookie, index === 32 ? "octocat" : "acme"));
+    }
+    for (const tab of [tabs[0], tabs[1], tabs.at(-1)!, otherForm]) tab.body.set("repository_selection", "all");
+    expect((await submit(f, cookie, tabs[0])).status).toBe(403);
+    expect(f.gh.appInstallations.all()).toHaveLength(0);
+    expect(f.store.getData<Map<string, unknown>>("github.installation.pendingForms")!.size).toBeLessThanOrEqual(33);
+    expect((await submit(f, cookie, tabs[1])).status).toBe(302);
+    expect((await submit(f, cookie, tabs.at(-1)!)).status).toBe(302);
+    expect((await submit(f, otherCookie, otherForm)).status).toBe(302);
+    expect(
+      f.gh.appInstallations
+        .all()
+        .map((installation) => installation.account_login)
+        .sort(),
+    ).toEqual(["acme", "octocat", "other"]);
+  });
+
+  it("evicts the oldest global form after 1024 pending forms spread across users", async () => {
+    const f = fixture();
+    const users = Array.from({ length: 33 }, (_, index) => ({ login: `capacity-user-${index}` }));
+    seedFromConfig(f.store, base, { users });
+    let oldest: { cookie: string; data: Awaited<ReturnType<typeof form>> } | undefined;
+    let retained: typeof oldest;
+    let latest: typeof oldest;
+    for (let userIndex = 0; userIndex < users.length; userIndex++) {
+      const login = users[userIndex].login;
+      const cookie = await session(f, login);
+      for (let index = 0; index < (userIndex === 32 ? 1 : 32); index++) {
+        const data = await form(f, cookie, login);
+        data.body.set("repository_selection", "all");
+        oldest ??= { cookie, data };
+        if (userIndex === 0 && index === 1) retained = { cookie, data };
+        latest = { cookie, data };
+      }
+    }
+    expect((await submit(f, oldest!.cookie, oldest!.data)).status).toBe(403);
+    expect(f.gh.appInstallations.all()).toHaveLength(0);
+    expect(f.store.getData<Map<string, unknown>>("github.installation.pendingForms")!.size).toBeLessThanOrEqual(1024);
+    expect((await submit(f, retained!.cookie, retained!.data)).status).toBe(302);
+    expect((await submit(f, latest!.cookie, latest!.data)).status).toBe(302);
+    expect(f.gh.appInstallations.all()).toHaveLength(2);
+    expect((await submit(f, latest!.cookie, latest!.data)).status).toBe(403);
+  }, 15_000);
+
+  it("cleans forms older than ten minutes while preserving both unexpired tabs", async () => {
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const f = fixture();
+    const cookie = await session(f);
+    const expired = await form(f, cookie);
+    now += 9 * 60 * 1000;
+    const personalTab = await form(f, cookie, "octocat");
+    now += 60 * 1000 + 1;
+    const organizationTab = await form(f, cookie);
+    expect(f.store.getData<Map<string, unknown>>("github.installation.pendingForms")!.size).toBe(2);
+    for (const tab of [expired, personalTab, organizationTab]) tab.body.set("repository_selection", "all");
+    expect((await submit(f, cookie, expired)).status).toBe(403);
+    expect((await submit(f, cookie, personalTab)).status).toBe(302);
+    expect((await submit(f, cookie, organizationTab)).status).toBe(302);
+    expect(
+      f.gh.appInstallations
+        .all()
+        .map((installation) => installation.account_login)
+        .sort(),
+    ).toEqual(["acme", "octocat"]);
+  });
+
+  it.each([
+    "",
+    "/setup",
+    "//client.example/setup",
+    "not a URL",
+    "https://[",
+    "javascript:alert(1)",
+    "data:text/html,local",
+    "file:///tmp/setup",
+    "ftp://client.example/setup",
+    "mailto:local@example.test",
+  ])("falls back to local settings when the seeded setup URL is %j", async (setupUrl) => {
+    const f = fixture(undefined, setupUrl);
+    const cookie = await session(f);
+    const state = "opaque + /?&=%<state>#return";
+    const data = await form(f, cookie, "acme", state);
+    data.body.set("repository_selection", "all");
+    const response = await submit(f, cookie, data);
+    expect(response.status).toBe(302);
+    expect(f.gh.appInstallations.all()).toHaveLength(1);
+    const installation = f.gh.appInstallations.all()[0];
+    const redirect = new URL(response.headers.get("location")!);
+    expect(redirect.origin + redirect.pathname).toBe(`${base}/settings/installations/${installation.installation_id}`);
+    expect(redirect.searchParams.get("state")).toBe(state);
+    expect(redirect.searchParams.get("installation_id")).toBe(String(installation.installation_id));
+    expect(redirect.searchParams.get("setup_action")).toBe("install");
+    expect((await submit(f, cookie, data)).status).toBe(403);
+    expect(f.gh.appInstallations.all()).toHaveLength(1);
+  });
+
+  it.each(["http://client.example/setup?keep=1", "https://client.example/setup?keep=1"])(
+    "continues to the configured HTTP callback %s",
+    async (setupUrl) => {
+      const f = fixture(undefined, setupUrl);
+      const cookie = await session(f);
+      const state = "opaque + /?&=%<state>#return";
+      const data = await form(f, cookie, "acme", state);
+      data.body.set("repository_selection", "all");
+      const response = await submit(f, cookie, data);
+      expect(response.status).toBe(302);
+      const redirect = new URL(response.headers.get("location")!);
+      const configured = new URL(setupUrl);
+      expect(redirect.origin + redirect.pathname).toBe(configured.origin + configured.pathname);
+      expect(redirect.searchParams.get("keep")).toBe("1");
+      expect(redirect.searchParams.get("state")).toBe(state);
+      expect(f.gh.appInstallations.all()).toHaveLength(1);
+    },
+  );
+
+  it("delivers one installation webhook and saves once when the seeded callback is malformed", async () => {
+    const deliveries: string[] = [];
+    const server = createServer(async (req, res) => {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      deliveries.push(body);
+      res.end("ok");
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as import("node:net").AddressInfo;
+    const f = fixture(`http://127.0.0.1:${address.port}/webhook`, "https://[");
+    const cookie = await session(f);
+    const data = await form(f, cookie);
+    data.body.set("repository_selection", "all");
+    const response = await submit(f, cookie, data);
+    expect(response.status).toBe(302);
+    expect(new URL(response.headers.get("location")!).origin).toBe(base);
+    expect(f.gh.appInstallations.all()).toHaveLength(1);
+    expect(deliveries).toHaveLength(1);
+    expect(JSON.parse(deliveries[0]).installation.id).toBe(f.gh.appInstallations.all()[0].installation_id);
+    expect((await submit(f, cookie, data)).status).toBe(403);
+    expect(f.gh.appInstallations.all()).toHaveLength(1);
+    expect(deliveries).toHaveLength(1);
   });
 });

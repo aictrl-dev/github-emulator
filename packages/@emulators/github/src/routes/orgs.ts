@@ -14,6 +14,8 @@ import {
   lookupRepo,
 } from "../helpers.js";
 
+import { listOrgMembersDeduped, orgRoleForUser } from "../route-helpers.js";
+
 const MEMBERS_TEAM_SLUG = "members";
 
 function notFound() {
@@ -75,36 +77,6 @@ export function orgsForAuthenticatedUser(gh: GitHubStore, userId: number): GitHu
   const orgs = [...orgIds].map((id) => gh.orgs.get(id)).filter((o): o is GitHubOrg => Boolean(o));
   orgs.sort((a, b) => a.login.localeCompare(b.login));
   return orgs;
-}
-
-type OrgMemberRow = { user: GitHubUser; orgRole: "admin" | "member" };
-
-function listOrgMembersDeduped(gh: GitHubStore, orgId: number): OrgMemberRow[] {
-  const byUser = new Map<number, { user: GitHubUser; isAdmin: boolean }>();
-  for (const team of teamsForOrg(gh, orgId)) {
-    for (const m of gh.teamMembers.findBy("team_id", team.id)) {
-      const user = gh.users.get(m.user_id);
-      if (!user) continue;
-      const isAdmin = m.role === "maintainer";
-      const prev = byUser.get(user.id);
-      if (!prev) {
-        byUser.set(user.id, { user, isAdmin });
-      } else {
-        byUser.set(user.id, { user, isAdmin: prev.isAdmin || isAdmin });
-      }
-    }
-  }
-  return [...byUser.values()]
-    .map(({ user, isAdmin }) => ({
-      user,
-      orgRole: isAdmin ? ("admin" as const) : ("member" as const),
-    }))
-    .sort((a, b) => a.user.id - b.user.id);
-}
-
-export function orgRoleForUser(gh: GitHubStore, orgId: number, userId: number): "admin" | "member" | null {
-  const row = listOrgMembersDeduped(gh, orgId).find((r) => r.user.id === userId);
-  return row?.orgRole ?? null;
 }
 
 function syncTeamMemberCount(gh: GitHubStore, teamId: number) {
