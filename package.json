@@ -12,7 +12,7 @@
     "start": "node packages/github-emulator/dist/cli.js",
     "demo": "node examples/demo.mjs",
     "test:smoke": "node examples/smoke.mjs",
-    "pack:standalone": "pnpm --filter @aictrl/github-emulator pack --pack-destination ../../artifacts"
+    "pack:standalone": "pnpm --filter @aictrl/github-emulator pack --pack-destination artifacts"
   },
   "devDependencies": {
     "@types/node": "^22",
