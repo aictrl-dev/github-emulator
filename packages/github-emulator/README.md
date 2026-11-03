@@ -24,4 +24,6 @@ After installing the tarball, `npx github-emulator --help` lists CLI options. It
 
 Browser App installation supports the OAuth session, account and repository selection, a configured setup callback, and signed `installation.created` webhooks. Pending forms expire after 10 minutes and are limited to 32 per user and 1024 per instance. Invalid callback configuration uses the installation's local settings URL. See [installation configuration](../../docs/github-app-installation.md).
 
+The source checkout includes a [cross-host browser proof](../../docs/cross-host-installation.md) with local HTTPS origins and a temporary trusted browser profile. It verifies that `setup_url` preserves its configured host and that the initiating host's `__Host-` cookie returns only after a redirect back to that host.
+
 Current limitations include GitHub App user-token refresh, native Git clone/push, and guaranteed cancellation of in-flight webhooks during reset. The baseline uses upstream's typed in-memory state; SQLite is a planned iteration. See the repository roadmap for the supported proof flows and contribution plan.

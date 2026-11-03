@@ -41,6 +41,8 @@ Use an App JWT for `/repositories/:id/installation`, then exchange it for an ins
 
 Pending installation forms expire after 10 minutes. The emulator retains at most 32 forms per user and 1024 per instance, evicting the oldest when a limit is reached. Reopen the installation page if a form has expired or been evicted. Setup callbacks must be absolute HTTP(S) URLs; omitted, malformed, relative, and non-HTTP(S) values use the installation's local settings URL.
 
+For application hosts that differ from the App's configured setup host, run `pnpm test:cross-host` after the prerequisites in `docs/cross-host-installation.md`. The browser proof uses local HTTPS on port 3005, selects a repository through the installation form, and observes host-only cookie delivery before and after a return to the initiating host. Reuse `examples/lib/local-https.mjs` for certificate generation, a trusted Firefox profile, and two HTTPS listeners. Keep TLS verification enabled and let the browser supply cookies.
+
 ## Iteration boundary
 
 Full user authorization/refresh remains outside the verified subset. SQLite remains planned; upstream's typed store is retained initially. Keep source changes and regression tests for protocol behavior in their own commits under the upstream package paths. See `docs/upstream-workflow.md` before preparing an upstream PR. Do not publish npm releases during the baseline.
