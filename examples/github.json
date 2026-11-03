@@ -1,0 +1,15 @@
+{
+  "github": {
+    "users": [{ "login": "octocat", "name": "Local developer", "email": "developer@example.test" }],
+    "repos": [{ "owner": "octocat", "name": "hello-world", "private": true, "auto_init": true }],
+    "oauth_apps": [{
+      "client_id": "local-client",
+      "client_secret": "local-secret",
+      "name": "Local test application",
+      "redirect_uris": ["http://127.0.0.1:3005/callback"]
+    }]
+  },
+  "tokens": {
+    "gho_local_token": { "login": "octocat", "scopes": ["repo", "user", "admin:repo_hook"] }
+  }
+}

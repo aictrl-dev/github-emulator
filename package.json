@@ -1,25 +1,24 @@
 {
-  "name": "emulate-monorepo",
+  "name": "github-emulator-workspace",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "test": "turbo test",
-    "clean": "turbo clean",
-    "type-check": "turbo type-check",
+    "build": "node scripts/build.mjs",
+    "test": "pnpm -r test",
+    "type-check": "pnpm -r type-check",
+    "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx}\"",
-    "sync-versions": "node scripts/sync-versions.mjs",
-    "test:custom-consumer": "node scripts/custom-api-acceptance.mjs"
+    "start": "node packages/github-emulator/dist/cli.js",
+    "demo": "node examples/demo.mjs",
+    "test:smoke": "node examples/smoke.mjs",
+    "pack:standalone": "pnpm --filter @aictrl/github-emulator pack --pack-destination ../../artifacts"
   },
   "devDependencies": {
     "@types/node": "^22",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.1",
-    "turbo": "^2.9.5",
     "typescript": "^5.7",
     "typescript-eslint": "^8.58.0",
     "vitest": "^4.1.0"

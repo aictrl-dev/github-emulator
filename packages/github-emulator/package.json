@@ -1,0 +1,50 @@
+{
+  "name": "@aictrl/github-emulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub-only edition of Vercel Labs emulate for local integration tests",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "github-emulator": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aictrl-dev/github-emulator.git",
+    "directory": "packages/github-emulator"
+  },
+  "scripts": {
+    "build": "tsup --clean",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "prepack": "node ../../scripts/prepare-package.mjs"
+  },
+  "dependencies": {
+    "jose": "^6.2.2"
+  },
+  "devDependencies": {
+    "@emulators/core": "workspace:*",
+    "@emulators/github": "workspace:*",
+    "tsup": "^8",
+    "typescript": "^5.7",
+    "vitest": "^4.1.0"
+  }
+}

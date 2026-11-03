@@ -1,5 +1,13 @@
 # Agents
 
+## GitHub-only fork scope
+
+This branch is the GitHub-only edition at `aictrl-dev/github-emulator`. Keep upstream attribution, Apache-2.0, and third-party notices. Retain upstream `main` for later behavior-only contributions. The fork has three workspaces: `@emulators/core`, `@emulators/github`, and `@aictrl/github-emulator`.
+
+The baseline preserves upstream core/GitHub source. Add fork runtime/CLI code under `packages/github-emulator`; later protocol changes belong in the preserved packages with their own regression tests and commits. Run the demo application on port 3005 and the emulator on 4200 unless overridden. Use Node 24 and pnpm.
+
+The documentation and release instructions below describe upstream. In this reduced edition, update root/package READMEs, `skills/github/SKILL.md`, CLI help, and relevant `docs/` pages. The upstream website and multi-service CLI were removed. Do not run upstream publishing workflows or publish the fork to npm during the baseline. See `docs/upstream-workflow.md` before proposing upstream changes.
+
 ## Package Manager
 
 Use `pnpm` for all package management commands (not npm or yarn).
