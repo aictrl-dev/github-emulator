@@ -11,11 +11,11 @@ import {
   renderUserButton,
   matchesRedirectUri,
   constantTimeSecretEqual,
-  parseCookies,
   debug,
 } from "@emulators/core";
 import { getGitHubStore } from "../store.js";
 import { formatUser, formatUserFull } from "../helpers.js";
+import { getBrowserSessionMap, resolveBrowserSessionUser } from "../route-helpers.js";
 
 type PendingCode = {
   login: string;
@@ -45,15 +45,6 @@ function getTokenToClientId(store: Store): Map<string, string> {
   return map;
 }
 
-function getSessionMap(store: Store): Map<string, string> {
-  let map = store.getData<Map<string, string>>("github.oauth.sessionMap");
-  if (!map) {
-    map = new Map();
-    store.setData("github.oauth.sessionMap", map);
-  }
-  return map;
-}
-
 /** On read: drops entries older than {@link PENDING_CODE_TTL_MS}. */
 function getPendingCodeIfValid(store: Store, code: string): PendingCode | undefined {
   const map = getPendingCodes(store);
@@ -77,17 +68,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       const user = gh.users.findOneBy("login", authUser.login);
       if (user) return { login: user.login, id: user.id };
     }
-    const cookieHeader = c.req.header("Cookie") ?? "";
-    const cookies = parseCookies(cookieHeader);
-    const sessionId = cookies["_emu_session"];
-    if (sessionId) {
-      const login = getSessionMap(store).get(sessionId);
-      if (login) {
-        const user = gh.users.findOneBy("login", login);
-        if (user) return { login: user.login, id: user.id };
-      }
-    }
-    return null;
+    return resolveBrowserSessionUser(store, c);
   }
 
   // ---------- OAuth authorize page ----------
@@ -181,7 +162,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     );
 
     const sessionId = randomBytes(24).toString("base64url");
-    getSessionMap(store).set(sessionId, login);
+    getBrowserSessionMap(store).set(sessionId, login);
     c.header("Set-Cookie", `_emu_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax`);
 
     const sep = redirect_uri.includes("?") ? "&" : "?";

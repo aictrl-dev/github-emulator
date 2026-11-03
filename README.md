@@ -2,7 +2,7 @@
 
 A GitHub-only fork of [Vercel Labs emulate](https://github.com/vercel-labs/emulate) for local integration tests. It retains the upstream GitHub API and shared core, with a standalone library, CLI, and localhost demo. Licensed under Apache-2.0 with upstream attribution and third-party notices preserved.
 
-This baseline demonstrates OAuth App sign-in, GitHub App tokens for a seeded installation, API calls, and signed webhook delivery. Browser-driven GitHub App installation is the next iteration. See the [roadmap](docs/roadmap.md) for the remaining flow gaps.
+The emulator supports OAuth App sign-in, browser GitHub App installation with account and repository selection, installation-token API calls, and signed webhook delivery. Installation forms have bounded, expiring storage, and invalid setup callbacks fall back to a local settings URL. See [GitHub App installation](docs/github-app-installation.md) for the browser flow and discovery endpoints, and the [roadmap](docs/roadmap.md) for remaining gaps.
 
 ## Run the demo
 
@@ -108,7 +108,7 @@ The root build script keeps esbuild's working directory in the system temporary 
 
 ## Upstream contributions
 
-`main` keeps upstream history and layout. The default `github-only` branch contains this reduced edition. Upstream GitHub/core source is unchanged in the baseline; wrapper and packaging changes are kept separate from later protocol improvements. Follow the [contribution procedure](docs/upstream-workflow.md) to propose behavior-only patches against Vercel's full repository after tests prove them.
+`main` keeps upstream history and layout. The default `github-only` branch contains this reduced edition. Protocol improvements and their regression tests stay in the preserved upstream package paths, separate from wrapper and packaging changes. Follow the [contribution procedure](docs/upstream-workflow.md) to propose behavior-only patches against Vercel's full repository after tests prove them.
 
 Retained packages:
 

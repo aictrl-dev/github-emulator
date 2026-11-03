@@ -14,6 +14,8 @@ import {
   lookupRepo,
 } from "../helpers.js";
 
+import { listOrgMembersDeduped, orgRoleForUser } from "../route-helpers.js";
+
 const MEMBERS_TEAM_SLUG = "members";
 
 function notFound() {
@@ -65,7 +67,7 @@ function uniqueTeamSlug(gh: GitHubStore, orgId: number, base: string): string {
   return slug;
 }
 
-function orgsForAuthenticatedUser(gh: GitHubStore, userId: number): GitHubOrg[] {
+export function orgsForAuthenticatedUser(gh: GitHubStore, userId: number): GitHubOrg[] {
   const memberships = gh.teamMembers.findBy("user_id", userId);
   const orgIds = new Set<number>();
   for (const m of memberships) {
@@ -75,36 +77,6 @@ function orgsForAuthenticatedUser(gh: GitHubStore, userId: number): GitHubOrg[] 
   const orgs = [...orgIds].map((id) => gh.orgs.get(id)).filter((o): o is GitHubOrg => Boolean(o));
   orgs.sort((a, b) => a.login.localeCompare(b.login));
   return orgs;
-}
-
-type OrgMemberRow = { user: GitHubUser; orgRole: "admin" | "member" };
-
-function listOrgMembersDeduped(gh: GitHubStore, orgId: number): OrgMemberRow[] {
-  const byUser = new Map<number, { user: GitHubUser; isAdmin: boolean }>();
-  for (const team of teamsForOrg(gh, orgId)) {
-    for (const m of gh.teamMembers.findBy("team_id", team.id)) {
-      const user = gh.users.get(m.user_id);
-      if (!user) continue;
-      const isAdmin = m.role === "maintainer";
-      const prev = byUser.get(user.id);
-      if (!prev) {
-        byUser.set(user.id, { user, isAdmin });
-      } else {
-        byUser.set(user.id, { user, isAdmin: prev.isAdmin || isAdmin });
-      }
-    }
-  }
-  return [...byUser.values()]
-    .map(({ user, isAdmin }) => ({
-      user,
-      orgRole: isAdmin ? ("admin" as const) : ("member" as const),
-    }))
-    .sort((a, b) => a.user.id - b.user.id);
-}
-
-function orgRoleForUser(gh: GitHubStore, orgId: number, userId: number): "admin" | "member" | null {
-  const row = listOrgMembersDeduped(gh, orgId).find((r) => r.user.id === userId);
-  return row?.orgRole ?? null;
 }
 
 function syncTeamMemberCount(gh: GitHubStore, teamId: number) {
@@ -208,6 +180,32 @@ export function orgsAndTeamsRoutes({ app, store, baseUrl }: RouteContext): void 
     }
 
     return c.json(page.map((o) => formatOrgBrief(o, baseUrl)));
+  });
+
+  app.get("/user/memberships/orgs", (c) => {
+    const auth = requireAuthUser(c);
+    if (auth.installation || !auth.scopes.some((scope) => ["read:org", "write:org", "admin:org"].includes(scope))) {
+      throw forbidden();
+    }
+    const user = gh.users.findOneBy("login", auth.login);
+    if (!user) throw unauthorized();
+    const state = c.req.query("state");
+    if (state && state !== "active" && state !== "pending") {
+      throw new ApiError(422, "Invalid state parameter");
+    }
+    const orgs = state === "pending" ? [] : orgsForAuthenticatedUser(gh, user.id);
+    const { page, per_page } = parsePagination(c);
+    setLinkHeader(c, orgs.length, page, per_page);
+    return c.json(
+      orgs.slice((page - 1) * per_page, page * per_page).map((org) => ({
+        url: orgMembershipUrl(baseUrl, org.login, user.login),
+        state: "active",
+        role: orgRoleForUser(gh, org.id, user.id),
+        organization: formatOrgBrief(org, baseUrl),
+        organization_url: `${baseUrl}/orgs/${org.login}`,
+        user: formatUser(user, baseUrl),
+      })),
+    );
   });
 
   app.get("/user/orgs", (c) => {

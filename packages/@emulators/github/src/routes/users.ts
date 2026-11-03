@@ -68,6 +68,7 @@ export function usersRoutes({ app, store, baseUrl }: RouteContext): void {
     if (!user) {
       throw notFoundResponse();
     }
+    if (!authUser.installation) c.header("X-OAuth-Scopes", authUser.scopes.join(", "));
     return c.json(formatUserFull(user, baseUrl));
   });
 
@@ -122,6 +123,7 @@ export function usersRoutes({ app, store, baseUrl }: RouteContext): void {
     if (!updated) {
       throw notFoundResponse();
     }
+    if (!authUser.installation) c.header("X-OAuth-Scopes", authUser.scopes.join(", "));
     return c.json(formatUserFull(updated, baseUrl));
   });
 

@@ -26,6 +26,7 @@ import type {
   GitHubBlob,
   GitHubTree,
   GitHubApp,
+  GitHubAppInstallation,
 } from "./entities.js";
 import type { GitHubStore } from "./store.js";
 
@@ -758,4 +759,55 @@ export function getNextIssueNumber(store: GitHubStore, repoId: number): number {
 export function getNextMilestoneNumber(store: GitHubStore, repoId: number): number {
   const milestones = store.milestones.findBy("repo_id", repoId);
   return milestones.reduce((max, m) => Math.max(max, m.number), 0) + 1;
+}
+
+export function formatInstallation(
+  inst: GitHubAppInstallation,
+  ghApp: GitHubApp | undefined,
+  baseUrl: string,
+  gh: GitHubStore,
+) {
+  const account = inst.account_type === "Organization" ? gh.orgs.get(inst.account_id) : gh.users.get(inst.account_id);
+
+  return {
+    id: inst.installation_id,
+    account: account
+      ? {
+          login: account.login,
+          id: account.id,
+          node_id: account.node_id,
+          type: inst.account_type,
+          avatar_url: `${baseUrl}/avatars/u/${account.login}`,
+          url: `${baseUrl}/${inst.account_type === "Organization" ? "orgs" : "users"}/${account.login}`,
+        }
+      : null,
+    repository_selection: inst.repository_selection,
+    access_tokens_url: `${baseUrl}/app/installations/${inst.installation_id}/access_tokens`,
+    repositories_url: `${baseUrl}/installation/repositories`,
+    html_url: `${baseUrl}/settings/installations/${inst.installation_id}`,
+    app_id: inst.app_id,
+    app_slug: ghApp?.slug ?? null,
+    target_type: inst.account_type,
+    permissions: inst.permissions,
+    events: inst.events,
+    created_at: inst.created_at,
+    updated_at: inst.updated_at,
+    single_file_name: null,
+    has_multiple_single_files: false,
+    single_file_paths: [],
+    suspended_by: null,
+    suspended_at: inst.suspended_at,
+  };
+}
+
+export function reposForAccount(
+  gh: GitHubStore,
+  accountId: number,
+  accountType: GitHubRepo["owner_type"],
+): GitHubRepo[] {
+  return gh.repos.all().filter((repo) => repo.owner_id === accountId && repo.owner_type === accountType);
+}
+
+export function formatRepoBrief(repo: GitHubRepo) {
+  return { id: repo.id, node_id: repo.node_id, name: repo.name, full_name: repo.full_name, private: repo.private };
 }

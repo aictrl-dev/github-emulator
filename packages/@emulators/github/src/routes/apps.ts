@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import type { RouteContext, AuthApp } from "@emulators/core";
 import { getGitHubStore } from "../store.js";
-import { formatApp } from "../helpers.js";
+import { formatApp, formatInstallation, formatRepoBrief, reposForAccount } from "../helpers.js";
 
 export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): void {
   const gh = getGitHubStore(store);
@@ -55,7 +55,7 @@ export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): voi
     const installations = gh.appInstallations.findBy("app_id", authApp.appId);
     const ghApp = gh.apps.all().find((a) => a.app_id === authApp.appId);
 
-    return c.json(installations.map((inst) => formatInstallation(inst, ghApp, baseUrl)));
+    return c.json(installations.map((inst) => formatInstallation(inst, ghApp, baseUrl, gh)));
   });
 
   app.get("/app/installations/:installation_id", (c) => {
@@ -80,7 +80,7 @@ export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): voi
     }
 
     const ghApp = gh.apps.all().find((a) => a.app_id === authApp.appId);
-    return c.json(formatInstallation(inst, ghApp, baseUrl));
+    return c.json(formatInstallation(inst, ghApp, baseUrl, gh));
   });
 
   app.post("/app/installations/:installation_id/access_tokens", async (c) => {
@@ -130,9 +130,7 @@ export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): voi
           return c.json({ message: "The repositories field must contain up to 500 repository names." }, 422);
         }
 
-        const accountRepos = gh.repos
-          .all()
-          .filter((repo) => repo.owner_id === inst.account_id && repo.owner_type === inst.account_type);
+        const accountRepos = reposForAccount(gh, inst.account_id, inst.account_type);
         const resolvedIds: number[] = [];
         for (const name of body.repositories as string[]) {
           const repo = accountRepos.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase());
@@ -217,14 +215,8 @@ export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): voi
 
     const repos = requestedRepoIds
       .map((id) => gh.repos.get(id))
-      .filter(Boolean)
-      .map((r) => ({
-        id: r!.id,
-        node_id: r!.node_id,
-        name: r!.name,
-        full_name: r!.full_name,
-        private: r!.private,
-      }));
+      .filter((repo): repo is NonNullable<typeof repo> => Boolean(repo))
+      .map(formatRepoBrief);
 
     return c.json(
       {
@@ -254,11 +246,11 @@ export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): voi
         inst.account_type === repo.owner_type
       ) {
         const ghApp = gh.apps.all().find((a) => a.app_id === inst.app_id);
-        return c.json(formatInstallation(inst, ghApp, baseUrl));
+        return c.json(formatInstallation(inst, ghApp, baseUrl, gh));
       }
       if (inst.repository_selection === "selected" && inst.repository_ids.includes(repo.id)) {
         const ghApp = gh.apps.all().find((a) => a.app_id === inst.app_id);
-        return c.json(formatInstallation(inst, ghApp, baseUrl));
+        return c.json(formatInstallation(inst, ghApp, baseUrl, gh));
       }
     }
 
@@ -278,7 +270,7 @@ export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): voi
     }
 
     const ghApp = gh.apps.all().find((a) => a.app_id === inst.app_id);
-    return c.json(formatInstallation(inst, ghApp, baseUrl));
+    return c.json(formatInstallation(inst, ghApp, baseUrl, gh));
   });
 
   app.get("/users/:username/installation", (c) => {
@@ -294,40 +286,6 @@ export function appsRoutes({ app, store, baseUrl, tokenMap }: RouteContext): voi
     }
 
     const ghApp = gh.apps.all().find((a) => a.app_id === inst.app_id);
-    return c.json(formatInstallation(inst, ghApp, baseUrl));
+    return c.json(formatInstallation(inst, ghApp, baseUrl, gh));
   });
-
-  function formatInstallation(inst: any, ghApp: any, baseUrl: string) {
-    const account = inst.account_type === "Organization" ? gh.orgs.get(inst.account_id) : gh.users.get(inst.account_id);
-
-    return {
-      id: inst.installation_id,
-      account: account
-        ? {
-            login: account.login,
-            id: account.id,
-            node_id: account.node_id,
-            type: inst.account_type,
-            avatar_url: `${baseUrl}/avatars/u/${account.login}`,
-            url: `${baseUrl}/${inst.account_type === "Organization" ? "orgs" : "users"}/${account.login}`,
-          }
-        : null,
-      repository_selection: inst.repository_selection,
-      access_tokens_url: `${baseUrl}/app/installations/${inst.installation_id}/access_tokens`,
-      repositories_url: `${baseUrl}/installation/repositories`,
-      html_url: `${baseUrl}/settings/installations/${inst.installation_id}`,
-      app_id: inst.app_id,
-      app_slug: ghApp?.slug ?? null,
-      target_type: inst.account_type,
-      permissions: inst.permissions,
-      events: inst.events,
-      created_at: inst.created_at,
-      updated_at: inst.updated_at,
-      single_file_name: null,
-      has_multiple_single_files: false,
-      single_file_paths: [],
-      suspended_by: null,
-      suspended_at: inst.suspended_at,
-    };
-  }
 }

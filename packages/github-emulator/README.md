@@ -22,4 +22,6 @@ The default seed is synthetic. Configure `seed` and `tokens` for your tests. The
 
 After installing the tarball, `npx github-emulator --help` lists CLI options. It listens on loopback port 4200 by default and accepts `--port`, `--host`, `--base-url`, and `--config` for JSON configuration.
 
-Current limitations include browser App installation, GitHub App user-token refresh, native Git clone/push, and guaranteed cancellation of in-flight webhooks during reset. The baseline uses upstream's typed in-memory state; SQLite is a planned iteration. See the repository roadmap for the supported proof flows and contribution plan.
+Browser App installation supports the OAuth session, account and repository selection, a configured setup callback, and signed `installation.created` webhooks. Pending forms expire after 10 minutes and are limited to 32 per user and 1024 per instance. Invalid callback configuration uses the installation's local settings URL. See [installation configuration](../../docs/github-app-installation.md).
+
+Current limitations include GitHub App user-token refresh, native Git clone/push, and guaranteed cancellation of in-flight webhooks during reset. The baseline uses upstream's typed in-memory state; SQLite is a planned iteration. See the repository roadmap for the supported proof flows and contribution plan.

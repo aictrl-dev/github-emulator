@@ -1,6 +1,7 @@
-import type { AuthUser } from "@emulators/core";
-import { ApiError, notFound, unauthorized, forbidden } from "@emulators/core";
+import type { AuthUser, Context, AppEnv, Store } from "@emulators/core";
+import { ApiError, notFound, unauthorized, forbidden, parseCookies } from "@emulators/core";
 import type { GitHubStore } from "./store.js";
+import { getGitHubStore } from "./store.js";
 import type { GitHubRepo, GitHubUser } from "./entities.js";
 import { generateNodeId } from "./helpers.js";
 
@@ -330,4 +331,51 @@ export function assertRepoWrite(
 export function assertIssueWrite(gh: GitHubStore, authUser: AuthUser | undefined, repo: GitHubRepo): GitHubUser {
   assertRepoPermission(gh, authUser, repo, "issues", "write");
   return assertAuthenticatedActor(gh, authUser);
+}
+
+export function getBrowserSessionMap(store: Store): Map<string, string> {
+  let map = store.getData<Map<string, string>>("github.oauth.sessionMap");
+  if (!map) {
+    map = new Map();
+    store.setData("github.oauth.sessionMap", map);
+  }
+  return map;
+}
+
+/** Resolve browser identity from the same session established by OAuth sign-in. */
+export function resolveBrowserSessionUser(store: Store, c: Context<AppEnv>): { login: string; id: number } | null {
+  const sessionId = parseCookies(c.req.header("Cookie") ?? "")["_emu_session"];
+  const login = sessionId ? getBrowserSessionMap(store).get(sessionId) : undefined;
+  const user = login ? getGitHubStore(store).users.findOneBy("login", login) : undefined;
+  return user ? { login: user.login, id: user.id } : null;
+}
+
+type OrgMemberRow = { user: GitHubUser; orgRole: "admin" | "member" };
+
+export function listOrgMembersDeduped(gh: GitHubStore, orgId: number): OrgMemberRow[] {
+  const byUser = new Map<number, { user: GitHubUser; isAdmin: boolean }>();
+  for (const team of gh.teams.findBy("org_id", orgId)) {
+    for (const m of gh.teamMembers.findBy("team_id", team.id)) {
+      const user = gh.users.get(m.user_id);
+      if (!user) continue;
+      const isAdmin = m.role === "maintainer";
+      const prev = byUser.get(user.id);
+      if (!prev) {
+        byUser.set(user.id, { user, isAdmin });
+      } else {
+        byUser.set(user.id, { user, isAdmin: prev.isAdmin || isAdmin });
+      }
+    }
+  }
+  return [...byUser.values()]
+    .map(({ user, isAdmin }) => ({
+      user,
+      orgRole: isAdmin ? ("admin" as const) : ("member" as const),
+    }))
+    .sort((a, b) => a.user.id - b.user.id);
+}
+
+export function orgRoleForUser(gh: GitHubStore, orgId: number, userId: number): "admin" | "member" | null {
+  const row = listOrgMembersDeduped(gh, orgId).find((r) => r.user.id === userId);
+  return row?.orgRole ?? null;
 }
