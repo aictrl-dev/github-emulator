@@ -2,7 +2,7 @@
 
 A GitHub-only fork of [Vercel Labs emulate](https://github.com/vercel-labs/emulate) for local integration tests. It retains the upstream GitHub API and shared core, with a standalone library, CLI, and localhost demo. Licensed under Apache-2.0 with upstream attribution and third-party notices preserved.
 
-The emulator supports OAuth App sign-in, browser GitHub App installation with account and repository selection, installation-token API calls, and signed webhook delivery. See [GitHub App installation](docs/github-app-installation.md) for the browser flow and discovery endpoints, and the [roadmap](docs/roadmap.md) for remaining gaps.
+The emulator supports OAuth App sign-in, browser GitHub App installation with account and repository selection, installation-token API calls, and signed webhook delivery. Installation forms have bounded, expiring storage, and invalid setup callbacks fall back to a local settings URL. See [GitHub App installation](docs/github-app-installation.md) for the browser flow and discovery endpoints, and the [roadmap](docs/roadmap.md) for remaining gaps.
 
 ## Run the demo
 

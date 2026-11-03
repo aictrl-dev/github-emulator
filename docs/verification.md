@@ -32,10 +32,13 @@ Verified on 2026-11-03 with Node 24.21.0 and pnpm 11.2.2.
 | `pnpm build` | Pass for core, GitHub, wrapper, CLI, and declarations |
 | `pnpm type-check` | Pass for all three packages |
 | `pnpm format:check` | Pass |
-| `pnpm lint` | Pass with 19 inherited warnings and zero errors |
-| `pnpm test` | 250 tests pass: core 103, GitHub 141, wrapper 6 |
+| `pnpm lint` | Pass with 17 existing warnings and zero errors |
+| `pnpm test` | 266 tests pass: core 103, GitHub 157, wrapper 6 |
 | `pnpm test:smoke` | Pass for the original seeded-installation HTTP flow |
+| `node scripts/package-smoke.mjs` | Pass for an external consumer of the packed package |
 
 The new route tests first failed on missing endpoints or missing OAuth scope headers. The passing suite covers browser session reuse, authorized account selection, repeated repository checkboxes, opaque setup state, configured callback ownership, nonce replay and user/App/account binding, current membership checks, duplicate installation rejection, and repository ownership. An actual local HTTP receiver verifies the `installation.created` payload and HMAC signature from the existing App webhook dispatcher.
 
 API regression tests cover paginated membership roles and scope enforcement, granted OAuth scope headers, full installation repository metadata, token/current-installation scope intersection, revoked and suspended installations, and App JWT ownership for repository installation lookup. These tests exercise emulator routes and real webhook delivery; the consuming application's complete browser journey requires its own end-to-end test.
+
+The review follow-up reproduced 13 failing cases before adding pending-form capacity limits and safe setup-callback fallback. All 23 installation-flow tests now pass, including oldest-form eviction, retained neighboring forms, user isolation, expiry, malformed and non-HTTP callbacks, preserved opaque state, and exactly one signed webhook after installation. The built CLI help reports the verified form limits and callback behavior.

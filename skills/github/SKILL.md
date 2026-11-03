@@ -39,6 +39,8 @@ Seed `apps[].setup_url` as the application callback and configure `webhook_url`,
 
 Use an App JWT for `/repositories/:id/installation`, then exchange it for an installation token and call `/installation/repositories`. Request `read:org` for OAuth organization discovery through `/user/memberships/orgs`; `/user` reports granted scopes in `X-OAuth-Scopes`. See `docs/github-app-installation.md` for the authorization and pagination contracts.
 
+Pending installation forms expire after 10 minutes. The emulator retains at most 32 forms per user and 1024 per instance, evicting the oldest when a limit is reached. Reopen the installation page if a form has expired or been evicted. Setup callbacks must be absolute HTTP(S) URLs; omitted, malformed, relative, and non-HTTP(S) values use the installation's local settings URL.
+
 ## Iteration boundary
 
 Full user authorization/refresh remains outside the verified subset. SQLite remains planned; upstream's typed store is retained initially. Keep source changes and regression tests for protocol behavior in their own commits under the upstream package paths. See `docs/upstream-workflow.md` before preparing an upstream PR. Do not publish npm releases during the baseline.
