@@ -1,6 +1,6 @@
 ---
 name: github
-description: Run and test the GitHub-only fork of Vercel Labs emulate locally, including OAuth App sign-in, App installation tokens, API calls, and signed webhooks.
+description: Run and test the GitHub-only fork of Vercel Labs emulate locally, including OAuth App sign-in, browser App installation, installation tokens, API calls, and signed webhooks.
 ---
 
 # GitHub-only emulator
@@ -33,6 +33,12 @@ The smoke command uses real HTTP requests and signature verification. It proves 
 
 Point OAuth authorization at `$GITHUB_EMULATOR_URL/login/oauth/authorize`, token exchange at `$GITHUB_EMULATOR_URL/login/oauth/access_token`, and API calls at `$GITHUB_EMULATOR_URL`. Set Octokit's `baseUrl` to that origin. Use synthetic credentials from the seed config; unknown bearer tokens are rejected by this wrapper.
 
+## Install a GitHub App
+
+Seed `apps[].setup_url` as the application callback and configure `webhook_url`, `webhook_secret`, and `events: ['installation']`. Start with `installations: []` to exercise creation. Complete OAuth sign-in first so the browser has `_emu_session`, then visit `/apps/:slug/installations/new?state=...` in the same browser. Choose **Install on ACCOUNT**, select all or specific repositories, and submit **Install**. The callback receives `installation_id`, `setup_action=install`, and the original `state`. The server uses only the configured callback URL.
+
+Use an App JWT for `/repositories/:id/installation`, then exchange it for an installation token and call `/installation/repositories`. Request `read:org` for OAuth organization discovery through `/user/memberships/orgs`; `/user` reports granted scopes in `X-OAuth-Scopes`. See `docs/github-app-installation.md` for the authorization and pagination contracts.
+
 ## Iteration boundary
 
-Browser-driven App installation and full user authorization/refresh are not implemented in the baseline. SQLite remains planned; upstream's typed store is retained initially. Keep source changes and regression tests for protocol behavior in their own commits under the upstream package paths. See `docs/upstream-workflow.md` before preparing an upstream PR. Do not publish npm releases during the baseline.
+Full user authorization/refresh remains outside the verified subset. SQLite remains planned; upstream's typed store is retained initially. Keep source changes and regression tests for protocol behavior in their own commits under the upstream package paths. See `docs/upstream-workflow.md` before preparing an upstream PR. Do not publish npm releases during the baseline.

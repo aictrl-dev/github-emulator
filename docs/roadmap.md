@@ -4,11 +4,11 @@
 
 Make Vercel's existing GitHub emulator runnable as a GitHub-only fork. Prove OAuth App sign-in, a GitHub App installation-token exchange against a seeded installation, authenticated API changes, and signed webhook reception over real localhost HTTP.
 
-This baseline does not provide browser-driven GitHub App installation. It does not claim complete GitHub OAuth or API compatibility. Keep the remaining gaps visible while the working subset is validated.
+The follow-up implementation adds [browser GitHub App installation](github-app-installation.md), setup callbacks, signed creation webhooks, and scoped repository discovery. Complete GitHub OAuth and API compatibility remain outside the verified subset.
 
 ## Next behavior to prove
 
-Exercise the application's full connection journey: user authorization, account and repository selection, installation setup callback, discovery of installations/repositories, and subsequent API access and webhooks. Add focused regression tests before changes, and keep behavior commits suitable for upstream review. Check existing upstream PR #265 and issue #328 before duplicating installation-discovery work.
+Verify the supported connection journey in consuming applications: OAuth user authorization, account and repository selection, setup callback, scoped discovery, subsequent API access, and signed webhooks. The protocol regression suite covers these emulator contracts. Keep behavior commits suitable for upstream review.
 
 ## State consistency
 

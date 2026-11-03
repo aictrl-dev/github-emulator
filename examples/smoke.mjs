@@ -34,7 +34,7 @@ try {
   assert.equal(event.payload.installation.id, 100);
 
   console.log("PASS: OAuth redirects, user identity, App JWT, installation token, API mutation, and verified webhook agree.");
-  console.log("Browser GitHub App installation remains a separate, unimplemented flow.");
+  console.log("Browser GitHub App installation is covered separately by the protocol regression tests.");
 } finally {
   await demo.close();
 }

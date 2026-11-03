@@ -32,6 +32,8 @@ import { checksRoutes } from "./routes/checks.js";
 import { rateLimitRoutes } from "./routes/rate-limit.js";
 import { metaRoutes } from "./routes/meta.js";
 import { oauthRoutes } from "./routes/oauth.js";
+import { appInstallationFlowRoutes } from "./routes/app-installation-flow.js";
+import { installationRepositoriesRoutes } from "./routes/installation-repositories.js";
 import { appsRoutes } from "./routes/apps.js";
 import { installationTokenRoutes } from "./routes/installation-tokens.js";
 import { findOrCreateBlob, findOrCreateCommit, findOrCreateTree } from "./git-helpers.js";
@@ -86,6 +88,7 @@ export interface GitHubSeedConfig {
     private_key?: string;
     permissions?: Record<string, string>;
     events?: string[];
+    setup_url?: string;
     webhook_url?: string;
     webhook_secret?: string;
     description?: string;
@@ -513,6 +516,7 @@ export function seedFromConfig(store: Store, baseUrl: string, config: GitHubSeed
         private_key: privateKey,
         permissions: a.permissions ?? {},
         events: a.events ?? [],
+        setup_url: a.setup_url ?? null,
         webhook_url: a.webhook_url ?? null,
         webhook_secret: a.webhook_secret ?? null,
         description: a.description ?? null,
@@ -557,6 +561,7 @@ function findInstallationsForRepo(
   ownerLogin: string,
   repoName: string | undefined,
   event: string,
+  payload?: unknown,
 ): GitHubAppInstallation[] {
   const repoEntity = repoName ? gh.repos.findOneBy("full_name", `${ownerLogin}/${repoName}`) : null;
   const ownerUser = gh.users.findOneBy("login", ownerLogin);
@@ -567,6 +572,10 @@ function findInstallationsForRepo(
 
   const results: GitHubAppInstallation[] = [];
   for (const inst of gh.appInstallations.all()) {
+    if (event === "installation") {
+      const target = (payload as { installation?: { id?: number } } | undefined)?.installation?.id;
+      if (target !== inst.installation_id) continue;
+    }
     if (inst.account_id !== ownerId || inst.account_type !== ownerType) continue;
     if (inst.suspended_at) continue;
 
@@ -588,6 +597,7 @@ function enrichPayloadWithInstallation(payload: unknown, installation: GitHubApp
   return {
     ...(payload as Record<string, unknown>),
     installation: {
+      ...((payload as { installation?: object }).installation ?? {}),
       id: installation.installation_id,
       node_id: generateNodeId("Installation", installation.installation_id),
     },
@@ -602,7 +612,7 @@ async function deliverToAppWebhookUrls(
   ownerLogin: string,
   repoName: string | undefined,
 ): Promise<void> {
-  const installations = findInstallationsForRepo(gh, ownerLogin, repoName, event);
+  const installations = findInstallationsForRepo(gh, ownerLogin, repoName, event, payload);
 
   for (const inst of installations) {
     const ghApp = gh.apps.all().find((a) => a.app_id === inst.app_id);
@@ -647,7 +657,7 @@ export const githubPlugin: ServicePlugin = {
       owner: string,
       repo?: string,
     ): Promise<void> => {
-      const installations = findInstallationsForRepo(gh, owner, repo, event);
+      const installations = findInstallationsForRepo(gh, owner, repo, event, payload);
 
       const enrichedPayload =
         installations.length > 0 ? enrichPayloadWithInstallation(payload, installations[0]) : payload;
@@ -675,6 +685,8 @@ export const githubPlugin: ServicePlugin = {
     metaRoutes(ctx);
     oauthRoutes(ctx);
     appsRoutes(ctx);
+    appInstallationFlowRoutes(ctx);
+    installationRepositoriesRoutes(ctx);
     installationTokenRoutes(ctx);
     contentsRoutes(ctx);
     // Registered last: the catch-all /commits/:ref{.+} route must not shadow

@@ -15,6 +15,8 @@ npm install @emulators/github
 ### Users
 - `GET /user` — authenticated user
 - `PATCH /user` — update profile
+- `GET /user/memberships/orgs` returns active organization memberships with admin/member roles, `state` filtering, and pagination. Requires `read:org`, `write:org`, or `admin:org`.
+- OAuth-authenticated `GET /user` and `PATCH /user` include the granted `X-OAuth-Scopes` header.
 - `GET /users/:username` — get user
 - `GET /users` — list users
 - `GET /users/:username/repos` — list user repos
@@ -131,6 +133,15 @@ npm install @emulators/github
 - Check suites: create, get, preferences, rerequest, list by ref. Ref based lookups accept branch and tag refs containing slashes.
 - Automatic suite status rollup from check run results
 
+### GitHub Apps
+
+- `GET /apps/:slug/installations/new` displays account and repository selection using the browser session established by OAuth sign-in.
+- `POST /apps/:slug/installations/new` creates an installation, dispatches `installation.created`, and redirects to the App's configured `setup_url`.
+- `GET /installation/repositories` returns paginated repository metadata for an installation token, intersected with the current installation scope.
+- `GET /repositories/:id/installation` finds the current installation for the authenticated App JWT.
+
+See [GitHub App installation](../../../docs/github-app-installation.md) for configuration and callback behavior.
+
 ### Misc
 - `GET /_emulate/installation-tokens` — inspect secret-free GitHub App installation-token metadata
 - `GET /rate_limit` — rate limit status
@@ -182,7 +193,10 @@ github:
       permissions:
         contents: read
         issues: write
-      events: [push, pull_request]
+      events: [installation, push, pull_request]
+      setup_url: "http://localhost:3005/github/setup"
+      webhook_url: "http://localhost:3005/webhooks"
+      webhook_secret: "local-webhook-secret"
       installations:
         - installation_id: 100
           account: my-org

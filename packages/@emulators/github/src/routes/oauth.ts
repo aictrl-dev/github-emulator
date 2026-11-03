@@ -54,6 +54,14 @@ function getSessionMap(store: Store): Map<string, string> {
   return map;
 }
 
+/** Resolve browser identity from the same session established by OAuth sign-in. */
+export function resolveBrowserSessionUser(store: Store, c: Context<AppEnv>): { login: string; id: number } | null {
+  const sessionId = parseCookies(c.req.header("Cookie") ?? "")["_emu_session"];
+  const login = sessionId ? getSessionMap(store).get(sessionId) : undefined;
+  const user = login ? getGitHubStore(store).users.findOneBy("login", login) : undefined;
+  return user ? { login: user.login, id: user.id } : null;
+}
+
 /** On read: drops entries older than {@link PENDING_CODE_TTL_MS}. */
 function getPendingCodeIfValid(store: Store, code: string): PendingCode | undefined {
   const map = getPendingCodes(store);
@@ -77,17 +85,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       const user = gh.users.findOneBy("login", authUser.login);
       if (user) return { login: user.login, id: user.id };
     }
-    const cookieHeader = c.req.header("Cookie") ?? "";
-    const cookies = parseCookies(cookieHeader);
-    const sessionId = cookies["_emu_session"];
-    if (sessionId) {
-      const login = getSessionMap(store).get(sessionId);
-      if (login) {
-        const user = gh.users.findOneBy("login", login);
-        if (user) return { login: user.login, id: user.id };
-      }
-    }
-    return null;
+    return resolveBrowserSessionUser(store, c);
   }
 
   // ---------- OAuth authorize page ----------

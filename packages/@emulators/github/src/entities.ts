@@ -491,6 +491,7 @@ export interface GitHubApp extends Entity {
   private_key: string;
   permissions: Record<string, string>;
   events: string[];
+  setup_url?: string | null;
   webhook_url: string | null;
   webhook_secret: string | null;
   description: string | null;

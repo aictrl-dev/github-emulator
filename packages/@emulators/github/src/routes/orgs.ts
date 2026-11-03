@@ -65,7 +65,7 @@ function uniqueTeamSlug(gh: GitHubStore, orgId: number, base: string): string {
   return slug;
 }
 
-function orgsForAuthenticatedUser(gh: GitHubStore, userId: number): GitHubOrg[] {
+export function orgsForAuthenticatedUser(gh: GitHubStore, userId: number): GitHubOrg[] {
   const memberships = gh.teamMembers.findBy("user_id", userId);
   const orgIds = new Set<number>();
   for (const m of memberships) {
@@ -102,7 +102,7 @@ function listOrgMembersDeduped(gh: GitHubStore, orgId: number): OrgMemberRow[] {
     .sort((a, b) => a.user.id - b.user.id);
 }
 
-function orgRoleForUser(gh: GitHubStore, orgId: number, userId: number): "admin" | "member" | null {
+export function orgRoleForUser(gh: GitHubStore, orgId: number, userId: number): "admin" | "member" | null {
   const row = listOrgMembersDeduped(gh, orgId).find((r) => r.user.id === userId);
   return row?.orgRole ?? null;
 }
@@ -208,6 +208,32 @@ export function orgsAndTeamsRoutes({ app, store, baseUrl }: RouteContext): void 
     }
 
     return c.json(page.map((o) => formatOrgBrief(o, baseUrl)));
+  });
+
+  app.get("/user/memberships/orgs", (c) => {
+    const auth = requireAuthUser(c);
+    if (auth.installation || !auth.scopes.some((scope) => ["read:org", "write:org", "admin:org"].includes(scope))) {
+      throw forbidden();
+    }
+    const user = gh.users.findOneBy("login", auth.login);
+    if (!user) throw unauthorized();
+    const state = c.req.query("state");
+    if (state && state !== "active" && state !== "pending") {
+      throw new ApiError(422, "Invalid state parameter");
+    }
+    const orgs = state === "pending" ? [] : orgsForAuthenticatedUser(gh, user.id);
+    const { page, per_page } = parsePagination(c);
+    setLinkHeader(c, orgs.length, page, per_page);
+    return c.json(
+      orgs.slice((page - 1) * per_page, page * per_page).map((org) => ({
+        url: orgMembershipUrl(baseUrl, org.login, user.login),
+        state: "active",
+        role: orgRoleForUser(gh, org.id, user.id),
+        organization: formatOrgBrief(org, baseUrl),
+        organization_url: `${baseUrl}/orgs/${org.login}`,
+        user: formatUser(user, baseUrl),
+      })),
+    );
   });
 
   app.get("/user/orgs", (c) => {
