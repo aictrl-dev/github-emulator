@@ -11,13 +11,16 @@
     "format:check": "prettier --check \"**/*.{ts,tsx}\"",
     "start": "node packages/github-emulator/dist/cli.js",
     "demo": "node examples/demo.mjs",
+    "demo:cross-host": "node examples/cross-host-demo.mjs",
     "test:smoke": "node examples/smoke.mjs",
+    "test:cross-host": "node --test examples/cross-host.test.mjs",
     "pack:standalone": "pnpm --filter @aictrl/github-emulator pack --pack-destination artifacts"
   },
   "devDependencies": {
     "@types/node": "^22",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
+    "playwright": "^1.64.1",
     "prettier": "^3.8.1",
     "typescript": "^5.7",
     "typescript-eslint": "^8.58.0",

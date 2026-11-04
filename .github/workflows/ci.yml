@@ -29,4 +29,10 @@ jobs:
       - run: pnpm format:check
       - run: pnpm test
       - run: pnpm test:smoke
+      - name: Install browser prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3-tools
+      - run: pnpm exec playwright install --with-deps firefox
+      - run: pnpm test:cross-host
       - run: node scripts/package-smoke.mjs

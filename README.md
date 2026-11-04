@@ -27,6 +27,8 @@ Both servers use local synthetic credentials. The private App key stays in the d
 
 If another local application already uses `127.0.0.1:3005`, choose another available loopback address while keeping the demo on port 3005: `DEMO_HOST=127.0.0.98 pnpm demo`.
 
+Use the [cross-host installation proof](docs/cross-host-installation.md) to reproduce an HTTPS application starting OAuth on one host while the App's `setup_url` returns to another. `pnpm test:cross-host` drives the browser through account and repository selection, observes the missing host-only cookie, and verifies its return after a redirect to the initiating host.
+
 ## Run the emulator by itself
 
 ```bash

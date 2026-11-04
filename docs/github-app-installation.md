@@ -33,6 +33,8 @@ The standalone wrapper generates omitted App keys. Direct `seedFromConfig` calle
 
 Installation forms expire after 10 minutes, are bound to their user, App, and account, and can be submitted once. Pending forms are limited to 32 per user across accounts and 1024 per emulator instance. Reaching either limit evicts the oldest applicable form. Reopen the installation page after expiry or eviction. The server rechecks membership and repository ownership at submission, rejects empty selected sets and cross-account IDs with `422`, and rejects a duplicate App/account installation with `409`. Form sessions and pending forms are in memory and reset with the emulator.
 
+The configured `setup_url` can use a different host from the application that started OAuth. The emulator retains that host. Use the [cross-host installation proof](cross-host-installation.md) to observe a secure, host-only application cookie missing at the setup host and returning after a browser redirect to the initiating host.
+
 ## Discover memberships and installed repositories
 
 `GET /user/memberships/orgs?state=active&per_page=100` requires a user token with `read:org`, `write:org`, or `admin:org`. Responses include `state: "active"`, `role: "admin" | "member"`, and organization metadata. The emulator has active memberships only; requesting `state=pending` returns an empty list. Installation tokens cannot call this endpoint. OAuth-authenticated `GET /user` and `PATCH /user` report the token's granted scopes in `X-OAuth-Scopes`.

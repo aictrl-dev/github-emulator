@@ -15,6 +15,7 @@ Usage: github-emulator [options]
 
 Source checkout: pnpm start --config examples/github.json
 Demo application: pnpm demo (http://127.0.0.1:3005)
+Cross-host browser proof (source checkout): pnpm test:cross-host
 Installation forms expire after 10 minutes (32 per user, 1024 per instance).
 App setup callbacks must use HTTP(S); invalid values use local settings.
 `;
