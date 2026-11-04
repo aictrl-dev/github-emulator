@@ -1,19 +1,14 @@
 import { createServer } from "node:http";
-import { createHmac, randomBytes, sign, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { createGitHubEmulator } from "../packages/github-emulator/dist/index.js";
 import { escapeHtml, renderCardPage } from "../packages/@emulators/core/dist/index.js";
+import { getAppPrivateKey, mintAppJwt } from "./lib/github-app.mjs";
+import { closeServer, json, redirect } from "./lib/http.mjs";
 
 const clientId = "local-client";
 const clientSecret = "local-secret";
 const webhookSecret = "local-webhook-secret";
-
-function closeServer(server) {
-  return new Promise((resolve, reject) => {
-    server.close((error) => error && error.code !== "ERR_SERVER_NOT_RUNNING" ? reject(error) : resolve());
-    server.closeAllConnections();
-  });
-}
 
 async function readBody(request) {
   const chunks = [];
@@ -24,16 +19,6 @@ async function readBody(request) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
-}
-
-function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json" });
-  response.end(JSON.stringify(body));
-}
-
-function redirect(response, location) {
-  response.writeHead(302, { location });
-  response.end();
 }
 
 export async function startDemo({ appPort = 3005, emulatorPort = 4200, hostname = "127.0.0.1" } = {}) {
@@ -77,7 +62,7 @@ export async function startDemo({ appPort = 3005, emulatorPort = 4200, hostname 
   const sessions = new Map();
   const events = [];
   const waiters = new Set();
-  const appKey = emulator.generatedSecrets.find((secret) => secret.kind === "github.app_private_key").value;
+  const appKey = getAppPrivateKey(emulator);
   const api = (path, options) => fetch(`${emulator.url}${path}`, { ...options, signal: AbortSignal.timeout(8000) });
   const sessionFor = (request) => {
     const match = /(?:^|;\s*)demo_session=([A-Za-z0-9_-]+)/.exec(request.headers.cookie ?? "");
@@ -136,9 +121,7 @@ export async function startDemo({ appPort = 3005, emulatorPort = 4200, hostname 
     }
     if (request.method === "POST" && url.pathname === "/issues") {
       if (!session?.token) { json(response, 401, { error: "Sign in first" }); return; }
-      const now = Math.floor(Date.now() / 1000);
-      const unsigned = [{ alg: "RS256", typ: "JWT" }, { iss: "1234", iat: now - 60, exp: now + 300 }].map((part) => Buffer.from(JSON.stringify(part)).toString("base64url")).join(".");
-      const jwt = `${unsigned}.${sign("RSA-SHA256", Buffer.from(unsigned), appKey).toString("base64url")}`;
+      const jwt = mintAppJwt(appKey, 1234);
       const minted = await api("/app/installations/100/access_tokens", { method: "POST", headers: { authorization: `Bearer ${jwt}` } });
       const credentials = await minted.json();
       if (!minted.ok || !credentials.token) throw new Error(`App token exchange failed: ${minted.status}`);

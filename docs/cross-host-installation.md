@@ -21,7 +21,7 @@ From the repository root:
 ```bash
 pnpm install --frozen-lockfile
 pnpm build
-pnpm exec playwright install firefox
+pnpm exec playwright install --with-deps firefox
 pnpm test:cross-host
 ```
 

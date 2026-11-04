@@ -1,8 +1,10 @@
-import { createHash, createHmac, randomBytes, sign, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { createGitHubEmulator } from "../packages/github-emulator/dist/index.js";
 import { renderCardPage } from "../packages/@emulators/core/dist/index.js";
+import { getAppPrivateKey, mintAppJwt } from "./lib/github-app.mjs";
+import { json, redirect } from "./lib/http.mjs";
 import { startHttpsOrigins } from "./lib/local-https.mjs";
 
 export const correlationCookie = "__Host-emulator_oauth_correlation";
@@ -22,14 +24,6 @@ const matchesCorrelation = (claims, request) => {
   const expected = Buffer.from(claims.nonceHash);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 };
-const redirect = (response, target) => {
-  response.writeHead(302, { location: target });
-  response.end();
-};
-const json = (response, status, body) => {
-  response.writeHead(status, { "content-type": "application/json" });
-  response.end(JSON.stringify(body));
-};
 
 export async function startCrossHostDemo({
   tls,
@@ -46,10 +40,11 @@ export async function startCrossHostDemo({
   const mac = (body) => createHmac("sha256", stateKey).update(body).digest("base64url");
   const verifyState = (state) => {
     const index = state.lastIndexOf(".");
+    if (index < 0) return undefined;
     const body = state.slice(0, index);
     const actual = Buffer.from(state.slice(index + 1));
     const expected = Buffer.from(mac(body));
-    if (index < 0 || actual.length !== expected.length || !timingSafeEqual(actual, expected)) return undefined;
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return undefined;
     try {
       return JSON.parse(body);
     } catch {
@@ -154,15 +149,7 @@ export async function startCrossHostDemo({
           json(response, 400, { error: "Missing host-only OAuth cookie", observation });
           return;
         }
-        const key = emulator.generatedSecrets.find((secret) => secret.kind === "github.app_private_key").value;
-        const now = Math.floor(Date.now() / 1000);
-        const unsigned = [
-          { alg: "RS256", typ: "JWT" },
-          { iss: String(appId), iat: now - 60, exp: now + 300 },
-        ]
-          .map((part) => Buffer.from(JSON.stringify(part)).toString("base64url"))
-          .join(".");
-        const jwt = `${unsigned}.${sign("RSA-SHA256", Buffer.from(unsigned), key).toString("base64url")}`;
+        const jwt = mintAppJwt(getAppPrivateKey(emulator), appId);
         const minted = await fetch(`${emulator.url}/app/installations/${observation.installationId}/access_tokens`, {
           method: "POST",
           headers: { authorization: `Bearer ${jwt}` },

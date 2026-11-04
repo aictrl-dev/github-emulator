@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { closeServer } from "./http.mjs";
 
 export async function createLocalTls(hostnames = ["127.0.0.98", "127.0.0.99"]) {
   const directory = await mkdtemp(join(tmpdir(), "github-emulator-https-"));
@@ -111,16 +112,7 @@ export async function startHttpsOrigins({
   const sourceOrigin = `https://${sourceHostname}:${appPort}`;
   const callbackOrigin = `https://${callbackHostname}:${appPort}`;
   const servers = [];
-  const close = () =>
-    Promise.all(
-      servers.map(
-        (server) =>
-          new Promise((resolve, reject) => {
-            server.close((error) => (error && error.code !== "ERR_SERVER_NOT_RUNNING" ? reject(error) : resolve()));
-            server.closeAllConnections();
-          }),
-      ),
-    );
+  const close = () => Promise.all(servers.map(closeServer));
   try {
     for (const hostname of [sourceHostname, callbackHostname]) {
       const server = createServer(tls, (request, response) => {
