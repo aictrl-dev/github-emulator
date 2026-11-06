@@ -687,6 +687,11 @@ export function branchesAndGitRoutes({ app, store, webhooks, baseUrl }: RouteCon
     const repo = lookupRepo(gh, owner, repoName);
     if (!repo) throw notFoundResponse();
     assertRepoContentsRead(gh, c.get("authUser"), repo);
+    // GitHub answers a ref lookup in a repository with no commits with 409,
+    // not 404, so clients can tell "empty" from "missing branch".
+    if (gh.commits.findBy("repo_id", repo.id).length === 0) {
+      throw new ApiError(409, "Git Repository is empty.");
+    }
     const fullRef = fullRefFromParam(refParam);
     const r = gh.refs.findBy("repo_id", repo.id).find((x) => x.ref === fullRef);
     if (!r) throw notFoundResponse();

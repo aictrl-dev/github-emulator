@@ -1678,6 +1678,30 @@ describe("GitHub commits routes", () => {
     expect(res.status).toBe(409);
   });
 
+  it("409s on a branch ref lookup in an empty repository, like GitHub", async () => {
+    const res = await app.request(`${base}/repos/octocat/empty-repo/git/ref/heads/main`, { headers: authHeaders() });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { message: string }).message).toBe("Git Repository is empty.");
+  });
+
+  it("still 404s on a missing branch ref in a populated repository", async () => {
+    const res = await app.request(`${base}/repos/octocat/hello-world/git/ref/heads/no-such-branch`, {
+      headers: authHeaders(),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("serves the branch ref once an empty repository receives its first commit", async () => {
+    const created = await app.request(`${base}/repos/octocat/empty-repo/contents/README.md`, {
+      method: "PUT",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ message: "first", content: Buffer.from("hi\n").toString("base64") }),
+    });
+    expect(created.status).toBe(201);
+    const res = await app.request(`${base}/repos/octocat/empty-repo/git/ref/heads/main`, { headers: authHeaders() });
+    expect(res.status).toBe(200);
+  });
+
   it("returns a single commit with files and stats", async () => {
     const created = await putFile(app, "notes.txt", "one\ntwo\n");
     const createdBody = (await created.json()) as { commit: { sha: string } };
