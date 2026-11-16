@@ -237,6 +237,12 @@ export interface GitHubIssueEvent extends Entity {
   rename: { from: string; to: string } | null;
 }
 
+/** A directed "blocked by" edge: `blocked_issue_id` cannot proceed until `blocking_issue_id` is done. */
+export interface GitHubIssueDependency extends Entity {
+  blocked_issue_id: number;
+  blocking_issue_id: number;
+}
+
 export interface GitHubBranch extends Entity {
   repo_id: number;
   name: string;

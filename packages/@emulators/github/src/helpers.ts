@@ -384,6 +384,25 @@ export function formatIssue(issue: GitHubIssue, store: GitHubStore, baseUrl: str
     timeline_url: `${repoUrl}/issues/${issue.number}/timeline`,
     performed_via_github_app: null,
     author_association: computeAuthorAssociation(store, issue.user_id, issue.repo_id),
+    issue_dependencies_summary: issueDependenciesSummary(issue, store),
+  };
+}
+
+/** Counts as GitHub reports them: `blocked_by` and `blocking` count open issues, the totals count all. */
+function issueDependenciesSummary(issue: GitHubIssue, store: GitHubStore) {
+  const blockers = store.issueDependencies
+    .findBy("blocked_issue_id", issue.id)
+    .map((edge) => store.issues.get(edge.blocking_issue_id))
+    .filter((other): other is GitHubIssue => !!other);
+  const blocked = store.issueDependencies
+    .findBy("blocking_issue_id", issue.id)
+    .map((edge) => store.issues.get(edge.blocked_issue_id))
+    .filter((other): other is GitHubIssue => !!other);
+  return {
+    blocked_by: blockers.filter((other) => other.state === "open").length,
+    blocking: blocked.filter((other) => other.state === "open").length,
+    total_blocked_by: blockers.length,
+    total_blocking: blocked.length,
   };
 }
 

@@ -14,6 +14,7 @@ import type {
   GitHubComment,
   GitHubReview,
   GitHubIssueEvent,
+  GitHubIssueDependency,
   GitHubBranch,
   GitHubBranchProtection,
   GitHubRef,
@@ -53,6 +54,7 @@ export interface GitHubStore {
   comments: Collection<GitHubComment>;
   reviews: Collection<GitHubReview>;
   issueEvents: Collection<GitHubIssueEvent>;
+  issueDependencies: Collection<GitHubIssueDependency>;
   branches: Collection<GitHubBranch>;
   branchProtections: Collection<GitHubBranchProtection>;
   refs: Collection<GitHubRef>;
@@ -93,6 +95,10 @@ export function getGitHubStore(store: Store): GitHubStore {
     comments: store.collection<GitHubComment>("github.comments", ["repo_id"]),
     reviews: store.collection<GitHubReview>("github.reviews", ["repo_id", "pull_number"]),
     issueEvents: store.collection<GitHubIssueEvent>("github.issue_events", ["repo_id", "issue_number"]),
+    issueDependencies: store.collection<GitHubIssueDependency>("github.issue_dependencies", [
+      "blocked_issue_id",
+      "blocking_issue_id",
+    ]),
     branches: store.collection<GitHubBranch>("github.branches", ["repo_id"]),
     branchProtections: store.collection<GitHubBranchProtection>("github.branch_protections", ["repo_id"]),
     refs: store.collection<GitHubRef>("github.refs", ["repo_id"]),
