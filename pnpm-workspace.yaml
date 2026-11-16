@@ -1,8 +1,14 @@
+minimumReleaseAge: 2880
+# tsc-ts and its platform packages are Vercel Labs packages, exempt so the
+# type-check can use a just-released tsc-ts.
+minimumReleaseAgeExclude:
+  - "tsc-ts"
+  - "@tsc-ts/*"
+
+allowBuilds:
+  esbuild: false
+
 packages:
   - "packages/@emulators/core"
   - "packages/@emulators/github"
   - "packages/github-emulator"
-
-minimumReleaseAge: 2880
-allowBuilds:
-  esbuild: false

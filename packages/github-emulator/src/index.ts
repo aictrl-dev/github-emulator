@@ -102,6 +102,9 @@ function validateOptions(options: GitHubEmulatorOptions): void {
 export async function createGitHubEmulator(options: GitHubEmulatorOptions = {}): Promise<GitHubEmulator> {
   validateOptions(options);
   const prepared = await materializeGitHubSeedConfig(structuredClone(options.seed ?? defaultSeed));
+  // GitHub answers 401 Bad credentials for a token it never issued. Upstream keeps a permissive
+  // fallback by default; this edition matches GitHub unless a seed opts out explicitly.
+  prepared.config.strict_scopes ??= true;
   for (const app of prepared.config.apps ?? []) {
     const key = createPrivateKey(app.private_key!);
     if (key.asymmetricKeyType !== "rsa") throw new Error(`App ${app.app_id} requires an RSA private key`);
