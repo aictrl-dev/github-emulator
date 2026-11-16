@@ -3,9 +3,6 @@
   "plugins": [
     "typescript"
   ],
-  "categories": {
-    "correctness": "off"
-  },
   "rules": {
     "no-array-constructor": "error",
     "no-unused-expressions": [

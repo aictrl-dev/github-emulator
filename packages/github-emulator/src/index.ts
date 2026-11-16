@@ -1,6 +1,6 @@
 import { createPrivateKey } from "node:crypto";
 import type { Server } from "node:http";
-import { createServer, serve, type AppKeyResolver } from "@emulators/core";
+import { assertPortFree, createServer, serve, type AppKeyResolver } from "@emulators/core";
 import {
   createAppKeyResolver,
   getGitHubStore,
@@ -123,8 +123,12 @@ export async function createGitHubEmulator(options: GitHubEmulatorOptions = {}):
 
   let handler: ((request: Request) => Response | Promise<Response>) | undefined;
   const hostname = options.hostname ?? "127.0.0.1";
+  const port = options.port ?? 4200;
+  // Fail with EADDRINUSE when another process holds the port on the wildcard address, instead of
+  // binding the loopback address beside it and splitting traffic between two listeners.
+  await assertPortFree(hostname, port);
   const server = serve({
-    port: options.port ?? 4200,
+    port,
     hostname,
     fetch: (request) => (handler ? handler(request) : Response.json({ error: "Starting" }, { status: 503 })),
   });
