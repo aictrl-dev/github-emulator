@@ -93,7 +93,7 @@ export function issueDependenciesRoutes({ app, store, baseUrl }: RouteContext): 
     // Removing an edge needs write on the blocked issue only: the far end may have become unreadable since.
     const { issue } = pathIssue(gh, c, "write");
     const raw = c.req.param("issue_id")!;
-    if (!/^\d+$/.test(raw)) throw new ApiError(400, "Problems parsing issue_id");
+    if (!/^\d+$/.test(raw)) throw new ApiError(422, "Validation failed");
     const blockingId = Number(raw);
     const edge = gh.issueDependencies
       .findBy("blocked_issue_id", issue.id)
@@ -101,6 +101,9 @@ export function issueDependenciesRoutes({ app, store, baseUrl }: RouteContext): 
     const blocking = edge ? gh.issues.get(blockingId) : undefined;
     if (!edge || !blocking) throw notFoundResponse();
     gh.issueDependencies.delete(edge.id);
+    // Never serialize a far end the caller cannot read; the edge is still removed.
+    const blockingRepo = gh.repos.get(blocking.repo_id);
+    if (!blockingRepo || !canRead(gh, c.get("authUser"), blockingRepo)) return c.body(null, 204);
     return c.json(formatIssue(blocking, gh, baseUrl));
   });
 }

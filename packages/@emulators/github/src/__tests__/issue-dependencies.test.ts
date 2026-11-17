@@ -169,8 +169,11 @@ describe("GitHub issue dependencies", () => {
     const hidden = await createIssue("hubot/secret", "hubot-token");
     getGitHubStore(store).issueDependencies.insert({ blocked_issue_id: blocked.id, blocking_issue_id: hidden.id });
     const path = `/repos/octocat/alpha/issues/${blocked.number}/dependencies/blocked_by`;
-    expect((await call(`${path}/not-a-number`, { method: "DELETE" })).status).toBe(400);
-    expect((await call(`${path}/${hidden.id}`, { method: "DELETE" })).status).toBe(200);
+    expect((await call(`${path}/not-a-number`, { method: "DELETE" })).status).toBe(422);
+    // The private far end is not serialized back to a caller who cannot read it.
+    const removed = await call(`${path}/${hidden.id}`, { method: "DELETE" });
+    expect(removed.status).toBe(204);
+    expect(await removed.text()).toBe("");
     expect(getGitHubStore(store).issueDependencies.findBy("blocked_issue_id", blocked.id)).toEqual([]);
   });
 

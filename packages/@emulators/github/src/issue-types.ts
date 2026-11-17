@@ -2,7 +2,6 @@ import { ApiError } from "@emulators/core";
 import type { GitHubIssueType, GitHubOrg, GitHubRepo } from "./entities.js";
 import type { GitHubStore } from "./store.js";
 import { generateNodeId } from "./helpers.js";
-export { formatIssueType } from "./helpers.js";
 
 export interface IssueTypeSeed {
   name: string;
