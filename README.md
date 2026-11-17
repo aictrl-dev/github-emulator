@@ -80,7 +80,7 @@ try {
 }
 ```
 
-Options are `port`, `hostname`, `baseUrl`, `seed`, and `tokens`. The instance exposes `url`, `generatedSecrets`, `reset()`, and `close()`. Seeding uses the retained [upstream GitHub config](packages/@emulators/github/README.md). Tokens resolve to actual seeded user IDs. Omitted GitHub App keys are generated and returned through `generatedSecrets` in the programmatic API; the CLI does not print private keys.
+Options are `port`, `hostname`, `baseUrl`, `seed`, and `tokens`. Unlike upstream, tokens are checked strictly by default: a bearer token the seed did not configure and the emulator did not issue (for example one issued before `reset()`) gets `401 Bad credentials` (set `strict_scopes: false` in the seed for upstream's default-user fallback), and private repositories answer `404` to callers who cannot see them. The instance exposes `url`, `generatedSecrets`, `reset()`, and `close()`. Seeding uses the retained [upstream GitHub config](packages/@emulators/github/README.md). Tokens resolve to actual seeded user IDs. Omitted GitHub App keys are generated and returned through `generatedSecrets` in the programmatic API; the CLI does not print private keys.
 
 Each instance has independent in-memory state. Reset replays its seed and clears dynamic OAuth and installation tokens while retaining generated App keys. Closing an instance releases its HTTP listener. The baseline retains upstream's in-memory backend; SQLite is planned as a later consistency improvement. In-flight webhook cancellation across reset is not guaranteed by this baseline.
 

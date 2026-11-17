@@ -5,7 +5,7 @@ import { getGitHubStore } from "../store.js";
 import type { GitHubStore } from "../store.js";
 import type { GitHubIssue, GitHubRepo } from "../entities.js";
 import { assertIssueWrite, assertRepoPermission, notFoundResponse } from "../route-helpers.js";
-import { formatIssue, lookupRepo } from "../helpers.js";
+import { findIssueForRepo, formatIssue, lookupRepo } from "../helpers.js";
 
 /** GitHub limits each issue to 50 relationships of each kind. */
 export const MAX_ISSUE_DEPENDENCIES = 50;
@@ -30,7 +30,7 @@ function pathIssue(gh: GitHubStore, c: Context, required: "read" | "write"): { r
   if (!repo.has_issues) throw notFoundResponse();
   const issueNumber = Number(c.req.param("issue_number"));
   if (!Number.isInteger(issueNumber)) throw notFoundResponse();
-  const issue = gh.issues.findBy("repo_id", repo.id).find((i) => i.number === issueNumber && !i.is_pull_request);
+  const issue = findIssueForRepo(gh, repo.id, issueNumber);
   if (!issue) throw notFoundResponse();
   return { repo, issue };
 }
@@ -90,13 +90,20 @@ export function issueDependenciesRoutes({ app, store, baseUrl }: RouteContext): 
   });
 
   app.delete("/repos/:owner/:repo/issues/:issue_number/dependencies/blocked_by/:issue_id", (c) => {
+    // Removing an edge needs write on the blocked issue only: the far end may have become unreadable since.
     const { issue } = pathIssue(gh, c, "write");
-    const blocking = issueById(gh, c.get("authUser"), c.req.param("issue_id"));
+    const raw = c.req.param("issue_id")!;
+    if (!/^\d+$/.test(raw)) throw new ApiError(422, "Validation failed");
+    const blockingId = Number(raw);
     const edge = gh.issueDependencies
       .findBy("blocked_issue_id", issue.id)
-      .find((candidate) => candidate.blocking_issue_id === blocking.id);
-    if (!edge) throw notFoundResponse();
+      .find((candidate) => candidate.blocking_issue_id === blockingId);
+    const blocking = edge ? gh.issues.get(blockingId) : undefined;
+    if (!edge || !blocking) throw notFoundResponse();
     gh.issueDependencies.delete(edge.id);
+    // Never serialize a far end the caller cannot read; the edge is still removed.
+    const blockingRepo = gh.repos.get(blocking.repo_id);
+    if (!blockingRepo || !canRead(gh, c.get("authUser"), blockingRepo)) return c.body(null, 204);
     return c.json(formatIssue(blocking, gh, baseUrl));
   });
 }

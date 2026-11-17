@@ -1,5 +1,5 @@
 import { defineConfig } from "tsup";
-import { cpSync } from "node:fs";
+import { cpSync, rmSync } from "node:fs";
 import { emitTypes } from "../../scripts/emit-types.mjs";
 
 export default defineConfig({
@@ -12,6 +12,8 @@ export default defineConfig({
   noExternal: [/^@emulators\//],
   onSuccess: async () => {
     cpSync("../@emulators/core/src/fonts", "dist/fonts", { recursive: true });
+    // Declarations from deleted sources must not reach the bundled dist/index.d.ts.
+    rmSync(".types", { recursive: true, force: true });
     emitTypes(__dirname, { bundle: true });
   },
 });
