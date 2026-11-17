@@ -1,6 +1,6 @@
 import { createPrivateKey } from "node:crypto";
 import type { Server } from "node:http";
-import { createServer, serve, type AppKeyResolver } from "@emulators/core";
+import { assertPortFree, createServer, serve, type AppKeyResolver } from "@emulators/core";
 import {
   createAppKeyResolver,
   getGitHubStore,
@@ -102,6 +102,9 @@ function validateOptions(options: GitHubEmulatorOptions): void {
 export async function createGitHubEmulator(options: GitHubEmulatorOptions = {}): Promise<GitHubEmulator> {
   validateOptions(options);
   const prepared = await materializeGitHubSeedConfig(structuredClone(options.seed ?? defaultSeed));
+  // GitHub answers 401 Bad credentials for a token it never issued. Upstream keeps a permissive
+  // fallback by default; this edition matches GitHub unless a seed opts out explicitly.
+  prepared.config.strict_scopes ??= true;
   for (const app of prepared.config.apps ?? []) {
     const key = createPrivateKey(app.private_key!);
     if (key.asymmetricKeyType !== "rsa") throw new Error(`App ${app.app_id} requires an RSA private key`);
@@ -120,8 +123,12 @@ export async function createGitHubEmulator(options: GitHubEmulatorOptions = {}):
 
   let handler: ((request: Request) => Response | Promise<Response>) | undefined;
   const hostname = options.hostname ?? "127.0.0.1";
+  const port = options.port ?? 4200;
+  // Fail with EADDRINUSE when another process holds the port on the wildcard address, instead of
+  // binding the loopback address beside it and splitting traffic between two listeners.
+  await assertPortFree(hostname, port);
   const server = serve({
-    port: options.port ?? 4200,
+    port,
     hostname,
     fetch: (request) => (handler ? handler(request) : Response.json({ error: "Starting" }, { status: 503 })),
   });
