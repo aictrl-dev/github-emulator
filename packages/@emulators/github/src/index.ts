@@ -1,4 +1,4 @@
-import { createHmac, generateKeyPair } from "crypto";
+import { createHmac, generateKeyPair, randomUUID } from "crypto";
 import { constantTimeSecretEqual } from "@emulators/core";
 import type { Context, Hono } from "@emulators/core";
 import type {
@@ -636,7 +636,7 @@ async function deliverToAppWebhookUrls(
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "X-GitHub-Event": event,
-      "X-GitHub-Delivery": crypto.randomUUID(),
+      "X-GitHub-Delivery": randomUUID(),
     };
     if (ghApp.webhook_secret) {
       const hmac = createHmac("sha256", ghApp.webhook_secret).update(body).digest("hex");

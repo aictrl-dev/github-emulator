@@ -158,6 +158,20 @@ describe("GitHub issue dependencies", () => {
       token: "hubot-token",
     });
     expect(((await asHubot.json()) as Issue[]).map((issue) => issue.id)).toEqual([hidden.id]);
+    // The shared issue payload never counts a blocker some readers of this issue cannot see.
+    const summary = ((await (await call(`/repos/octocat/alpha/issues/${blocked.number}`)).json()) as Issue)
+      .issue_dependencies_summary;
+    expect(summary).toEqual({ blocked_by: 0, blocking: 0, total_blocked_by: 0, total_blocking: 0 });
+  });
+
+  it("removes an edge whose far end the caller can no longer read, and rejects a malformed id", async () => {
+    const blocked = await createIssue("octocat/alpha");
+    const hidden = await createIssue("hubot/secret", "hubot-token");
+    getGitHubStore(store).issueDependencies.insert({ blocked_issue_id: blocked.id, blocking_issue_id: hidden.id });
+    const path = `/repos/octocat/alpha/issues/${blocked.number}/dependencies/blocked_by`;
+    expect((await call(`${path}/not-a-number`, { method: "DELETE" })).status).toBe(400);
+    expect((await call(`${path}/${hidden.id}`, { method: "DELETE" })).status).toBe(200);
+    expect(getGitHubStore(store).issueDependencies.findBy("blocked_issue_id", blocked.id)).toEqual([]);
   });
 
   it("requires authentication to add an edge", async () => {

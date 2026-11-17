@@ -7,6 +7,7 @@ import { assertIssueWrite, assertRepoPermission, notFoundResponse, ownerLoginOf 
 import type { GitHubStore } from "../store.js";
 import type { GitHubIssue, GitHubIssueEvent, GitHubLabel, GitHubRepo, GitHubUser } from "../entities.js";
 import {
+  findIssueForRepo,
   formatIssue,
   formatRepo,
   formatUser,
@@ -15,10 +16,6 @@ import {
   lookupRepo,
   timestamp,
 } from "../helpers.js";
-
-function findIssueForRepo(gh: GitHubStore, repoId: number, issueNumber: number): GitHubIssue | undefined {
-  return gh.issues.findBy("repo_id", repoId).find((i) => i.number === issueNumber && !i.is_pull_request);
-}
 
 function adjustRepoOpenIssues(gh: GitHubStore, repoId: number, delta: number) {
   const repo = gh.repos.get(repoId);
@@ -312,7 +309,7 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
       milestoneId = ms.id;
     }
 
-    const typeId = resolveIssueTypeId(gh, repo, body.type) ?? null;
+    const typeId = resolveIssueTypeId(gh, repo, body.type);
 
     const num = getNextIssueNumber(gh, repo.id);
     const row = gh.issues.insert({
@@ -442,7 +439,7 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
       }
     }
 
-    if ("type" in body) patch.type_id = resolveIssueTypeId(gh, repo, body.type) ?? null;
+    if ("type" in body) patch.type_id = resolveIssueTypeId(gh, repo, body.type);
 
     const prevLabelIds = new Set(issue.label_ids);
     const prevAssigneeIds = new Set(issue.assignee_ids);
