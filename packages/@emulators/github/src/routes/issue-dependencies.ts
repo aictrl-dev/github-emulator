@@ -5,7 +5,7 @@ import { getGitHubStore } from "../store.js";
 import type { GitHubStore } from "../store.js";
 import type { GitHubIssue, GitHubRepo } from "../entities.js";
 import { assertIssueWrite, assertRepoPermission, notFoundResponse } from "../route-helpers.js";
-import { formatIssue, lookupRepo } from "../helpers.js";
+import { findIssueForRepo, formatIssue, lookupRepo } from "../helpers.js";
 
 /** GitHub limits each issue to 50 relationships of each kind. */
 export const MAX_ISSUE_DEPENDENCIES = 50;
@@ -30,7 +30,7 @@ function pathIssue(gh: GitHubStore, c: Context, required: "read" | "write"): { r
   if (!repo.has_issues) throw notFoundResponse();
   const issueNumber = Number(c.req.param("issue_number"));
   if (!Number.isInteger(issueNumber)) throw notFoundResponse();
-  const issue = gh.issues.findBy("repo_id", repo.id).find((i) => i.number === issueNumber && !i.is_pull_request);
+  const issue = findIssueForRepo(gh, repo.id, issueNumber);
   if (!issue) throw notFoundResponse();
   return { repo, issue };
 }
@@ -91,6 +91,7 @@ export function issueDependenciesRoutes({ app, store, baseUrl }: RouteContext): 
 
   app.delete("/repos/:owner/:repo/issues/:issue_number/dependencies/blocked_by/:issue_id", (c) => {
     const { issue } = pathIssue(gh, c, "write");
+    // A far end the caller cannot read is not found, as in the lists: its status must not reveal the edge.
     const blocking = issueById(gh, c.get("authUser"), c.req.param("issue_id"));
     const edge = gh.issueDependencies
       .findBy("blocked_issue_id", issue.id)

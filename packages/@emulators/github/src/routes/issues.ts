@@ -2,11 +2,14 @@ import type { Context } from "@emulators/core";
 import type { RouteContext } from "@emulators/core";
 import { ApiError, parseJsonBody, parsePagination, setLinkHeader } from "@emulators/core";
 import { getGitHubStore } from "../store.js";
+import { resolveIssueTypeId } from "../issue-types.js";
 import { assertIssueWrite, assertRepoPermission, notFoundResponse, ownerLoginOf } from "../route-helpers.js";
 import type { GitHubStore } from "../store.js";
 import type { GitHubIssue, GitHubIssueEvent, GitHubLabel, GitHubRepo, GitHubUser } from "../entities.js";
 import {
+  findIssueForRepo,
   formatIssue,
+  formatIssueType,
   formatRepo,
   formatUser,
   generateNodeId,
@@ -14,10 +17,6 @@ import {
   lookupRepo,
   timestamp,
 } from "../helpers.js";
-
-function findIssueForRepo(gh: GitHubStore, repoId: number, issueNumber: number): GitHubIssue | undefined {
-  return gh.issues.findBy("repo_id", repoId).find((i) => i.number === issueNumber && !i.is_pull_request);
-}
 
 function adjustRepoOpenIssues(gh: GitHubStore, repoId: number, delta: number) {
   const repo = gh.repos.get(repoId);
@@ -311,6 +310,8 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
       milestoneId = ms.id;
     }
 
+    const typeId = resolveIssueTypeId(gh, repo, body.type);
+
     const num = getNextIssueNumber(gh, repo.id);
     const row = gh.issues.insert({
       node_id: "",
@@ -330,6 +331,7 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
       closed_at: null,
       closed_by_id: null,
       is_pull_request: false,
+      type_id: typeId,
     } as Omit<GitHubIssue, "id" | "created_at" | "updated_at">);
     gh.issues.update(row.id, { node_id: generateNodeId("Issue", row.id) });
     const issue = gh.issues.get(row.id)!;
@@ -438,9 +440,12 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
       }
     }
 
+    if ("type" in body) patch.type_id = resolveIssueTypeId(gh, repo, body.type);
+
     const prevLabelIds = new Set(issue.label_ids);
     const prevAssigneeIds = new Set(issue.assignee_ids);
     const prevMilestoneId = issue.milestone_id;
+    const prevTypeId = issue.type_id ?? null;
 
     const updated = gh.issues.update(issue.id, patch);
     if (!updated) throw notFoundResponse();
@@ -632,6 +637,30 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
           );
         }
       }
+    }
+
+    // GitHub reports a type change as issues/typed (a type set or replaced) or issues/untyped (cleared).
+    const newTypeId = issue.type_id ?? null;
+    if ("type" in body && prevTypeId !== newTypeId) {
+      const event =
+        newTypeId === null ? "issue_type_removed" : prevTypeId === null ? "issue_type_added" : "issue_type_changed";
+      insertIssueEvent(gh, repo, issue.number, event, actor.id);
+      const action = newTypeId === null ? "untyped" : "typed";
+      const typeId = newTypeId ?? prevTypeId;
+      const type = typeId ? gh.issueTypes.get(typeId) : undefined;
+      webhooks.dispatch(
+        "issues",
+        action,
+        {
+          action,
+          issue: formatIssue(issue, gh, baseUrl)!,
+          type: type ? formatIssueType(type) : null,
+          repository: formatRepo(repo, gh, baseUrl),
+          sender: formatUser(actor, baseUrl),
+        },
+        ownerLogin,
+        repo.name,
+      );
     }
 
     const titleEdited = typeof body.title === "string" && body.title !== beforePatch.title;

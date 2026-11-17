@@ -131,6 +131,8 @@ export interface GitHubIssue extends Entity {
   closed_at: string | null;
   closed_by_id: number | null;
   is_pull_request: boolean;
+  /** Organization issue type; absent on rows written before issue types existed. */
+  type_id?: number | null;
 }
 
 export interface GitHubPullRequest extends Entity {
@@ -235,6 +237,16 @@ export interface GitHubIssueEvent extends Entity {
   assignee_id: number | null;
   milestone_title: string | null;
   rename: { from: string; to: string } | null;
+}
+
+/** An organization's issue type (Task, Bug, Feature by default). */
+export interface GitHubIssueType extends Entity {
+  node_id: string;
+  org_id: number;
+  name: string;
+  description: string | null;
+  color: string | null;
+  is_enabled: boolean;
 }
 
 /** A directed "blocked by" edge: `blocked_issue_id` cannot proceed until `blocking_issue_id` is done. */

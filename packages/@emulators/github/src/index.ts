@@ -1,4 +1,4 @@
-import { createHmac, generateKeyPair } from "crypto";
+import { createHmac, generateKeyPair, randomUUID } from "crypto";
 import { constantTimeSecretEqual } from "@emulators/core";
 import type { Context, Hono } from "@emulators/core";
 import type {
@@ -19,6 +19,8 @@ import { usersRoutes } from "./routes/users.js";
 import { reposRoutes } from "./routes/repos.js";
 import { issuesRoutes } from "./routes/issues.js";
 import { issueDependenciesRoutes } from "./routes/issue-dependencies.js";
+import { issueTypesRoutes } from "./routes/issue-types.js";
+import { seedIssueTypes, type IssueTypeSeed } from "./issue-types.js";
 import { pullsRoutes } from "./routes/pulls.js";
 import { commentsRoutes } from "./routes/comments.js";
 import { reviewsRoutes } from "./routes/reviews.js";
@@ -67,6 +69,8 @@ export interface GitHubSeedConfig {
       login: string;
       role?: "member" | "admin";
     }>;
+    /** Defaults to GitHub's Task, Bug and Feature; an empty list seeds none. */
+    issue_types?: IssueTypeSeed[];
   }>;
   tokens?: Record<string, { login: string; scopes?: string[] }>;
   repos?: Array<{
@@ -359,6 +363,7 @@ export function seedFromConfig(store: Store, baseUrl: string, config: GitHubSeed
         billing_email: null,
       });
       gh.orgs.update(org.id, { node_id: generateNodeId("Org", org.id) });
+      seedIssueTypes(gh, gh.orgs.get(org.id)!, o.issue_types);
     }
   }
 
@@ -631,7 +636,7 @@ async function deliverToAppWebhookUrls(
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "X-GitHub-Event": event,
-      "X-GitHub-Delivery": String(Date.now()),
+      "X-GitHub-Delivery": randomUUID(),
     };
     if (ghApp.webhook_secret) {
       const hmac = createHmac("sha256", ghApp.webhook_secret).update(body).digest("hex");
@@ -702,6 +707,7 @@ export const githubPlugin: ServicePlugin = {
     reposRoutes(ctx);
     issuesRoutes(ctx);
     issueDependenciesRoutes(ctx);
+    issueTypesRoutes(ctx);
     pullsRoutes(ctx);
     commentsRoutes(ctx);
     reviewsRoutes(ctx);

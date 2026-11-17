@@ -32,6 +32,7 @@
   },
   "scripts": {
     "build": "tsup --clean",
+    "clean": "rm -rf dist .types .turbo",
     "test": "vitest run",
     "type-check": "tsc-ts --noEmit",
     "type-check:tsc": "tsc --noEmit",

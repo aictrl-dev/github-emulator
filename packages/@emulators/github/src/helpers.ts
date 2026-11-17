@@ -4,6 +4,7 @@ import type {
   GitHubOrg,
   GitHubRepo,
   GitHubIssue,
+  GitHubIssueType,
   GitHubPullRequest,
   GitHubLabel,
   GitHubMilestone,
@@ -374,6 +375,7 @@ export function formatIssue(issue: GitHubIssue, store: GitHubStore, baseUrl: str
     assignee: assignees[0] ?? null,
     assignees,
     milestone: milestone ? formatMilestone(milestone, repo, store, baseUrl) : null,
+    type: issueTypeJson(issue, store),
     comments: issue.comments,
     created_at: issue.created_at,
     updated_at: issue.updated_at,
@@ -388,16 +390,45 @@ export function formatIssue(issue: GitHubIssue, store: GitHubStore, baseUrl: str
   };
 }
 
-/** Counts as GitHub reports them: `blocked_by` and `blocking` count open issues, the totals count all. */
+export function formatIssueType(type: GitHubIssueType) {
+  return {
+    id: type.id,
+    node_id: type.node_id,
+    name: type.name,
+    description: type.description,
+    color: type.color,
+    created_at: type.created_at,
+    updated_at: type.updated_at,
+    is_enabled: type.is_enabled,
+  };
+}
+
+function issueTypeJson(issue: GitHubIssue, store: GitHubStore) {
+  const type = issue.type_id ? store.issueTypes.get(issue.type_id) : undefined;
+  return type ? formatIssueType(type) : null;
+}
+
+export function findIssueForRepo(gh: GitHubStore, repoId: number, issueNumber: number): GitHubIssue | undefined {
+  return gh.issues.findBy("repo_id", repoId).find((i) => i.number === issueNumber && !i.is_pull_request);
+}
+
+/**
+ * Counts as GitHub reports them: `blocked_by` and `blocking` count open issues, the totals count all.
+ * The issue payload is shared by every reader, so only related issues every reader of this issue can
+ * see are counted: those in the same repository or in a public one. The dependency list endpoints,
+ * which know the caller, return the rest to callers who may see them.
+ */
 function issueDependenciesSummary(issue: GitHubIssue, store: GitHubStore) {
+  const visibleToAllReaders = (other: GitHubIssue | undefined): other is GitHubIssue =>
+    !!other && (other.repo_id === issue.repo_id || store.repos.get(other.repo_id)?.visibility === "public");
   const blockers = store.issueDependencies
     .findBy("blocked_issue_id", issue.id)
     .map((edge) => store.issues.get(edge.blocking_issue_id))
-    .filter((other): other is GitHubIssue => !!other);
+    .filter(visibleToAllReaders);
   const blocked = store.issueDependencies
     .findBy("blocking_issue_id", issue.id)
     .map((edge) => store.issues.get(edge.blocked_issue_id))
-    .filter((other): other is GitHubIssue => !!other);
+    .filter(visibleToAllReaders);
   return {
     blocked_by: blockers.filter((other) => other.state === "open").length,
     blocking: blocked.filter((other) => other.state === "open").length,
