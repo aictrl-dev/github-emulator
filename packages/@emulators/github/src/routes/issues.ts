@@ -2,6 +2,7 @@ import type { Context } from "@emulators/core";
 import type { RouteContext } from "@emulators/core";
 import { ApiError, parseJsonBody, parsePagination, setLinkHeader } from "@emulators/core";
 import { getGitHubStore } from "../store.js";
+import { resolveIssueTypeId } from "../issue-types.js";
 import { assertIssueWrite, assertRepoPermission, notFoundResponse, ownerLoginOf } from "../route-helpers.js";
 import type { GitHubStore } from "../store.js";
 import type { GitHubIssue, GitHubIssueEvent, GitHubLabel, GitHubRepo, GitHubUser } from "../entities.js";
@@ -311,6 +312,8 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
       milestoneId = ms.id;
     }
 
+    const typeId = resolveIssueTypeId(gh, repo, body.type) ?? null;
+
     const num = getNextIssueNumber(gh, repo.id);
     const row = gh.issues.insert({
       node_id: "",
@@ -330,6 +333,7 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
       closed_at: null,
       closed_by_id: null,
       is_pull_request: false,
+      type_id: typeId,
     } as Omit<GitHubIssue, "id" | "created_at" | "updated_at">);
     gh.issues.update(row.id, { node_id: generateNodeId("Issue", row.id) });
     const issue = gh.issues.get(row.id)!;
@@ -437,6 +441,8 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
         patch.milestone_id = ms.id;
       }
     }
+
+    if ("type" in body) patch.type_id = resolveIssueTypeId(gh, repo, body.type) ?? null;
 
     const prevLabelIds = new Set(issue.label_ids);
     const prevAssigneeIds = new Set(issue.assignee_ids);

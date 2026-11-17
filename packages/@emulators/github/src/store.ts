@@ -15,6 +15,7 @@ import type {
   GitHubReview,
   GitHubIssueEvent,
   GitHubIssueDependency,
+  GitHubIssueType,
   GitHubBranch,
   GitHubBranchProtection,
   GitHubRef,
@@ -55,6 +56,7 @@ export interface GitHubStore {
   reviews: Collection<GitHubReview>;
   issueEvents: Collection<GitHubIssueEvent>;
   issueDependencies: Collection<GitHubIssueDependency>;
+  issueTypes: Collection<GitHubIssueType>;
   branches: Collection<GitHubBranch>;
   branchProtections: Collection<GitHubBranchProtection>;
   refs: Collection<GitHubRef>;
@@ -99,6 +101,7 @@ export function getGitHubStore(store: Store): GitHubStore {
       "blocked_issue_id",
       "blocking_issue_id",
     ]),
+    issueTypes: store.collection<GitHubIssueType>("github.issue_types", ["org_id"]),
     branches: store.collection<GitHubBranch>("github.branches", ["repo_id"]),
     branchProtections: store.collection<GitHubBranchProtection>("github.branch_protections", ["repo_id"]),
     refs: store.collection<GitHubRef>("github.refs", ["repo_id"]),

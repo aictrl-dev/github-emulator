@@ -374,6 +374,7 @@ export function formatIssue(issue: GitHubIssue, store: GitHubStore, baseUrl: str
     assignee: assignees[0] ?? null,
     assignees,
     milestone: milestone ? formatMilestone(milestone, repo, store, baseUrl) : null,
+    type: issueTypeJson(issue, store),
     comments: issue.comments,
     created_at: issue.created_at,
     updated_at: issue.updated_at,
@@ -386,6 +387,13 @@ export function formatIssue(issue: GitHubIssue, store: GitHubStore, baseUrl: str
     author_association: computeAuthorAssociation(store, issue.user_id, issue.repo_id),
     issue_dependencies_summary: issueDependenciesSummary(issue, store),
   };
+}
+
+function issueTypeJson(issue: GitHubIssue, store: GitHubStore) {
+  const type = issue.type_id ? store.issueTypes.get(issue.type_id) : undefined;
+  if (!type) return null;
+  const { id, node_id, name, description, color, created_at, updated_at, is_enabled } = type;
+  return { id, node_id, name, description, color, created_at, updated_at, is_enabled };
 }
 
 /** Counts as GitHub reports them: `blocked_by` and `blocking` count open issues, the totals count all. */
