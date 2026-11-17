@@ -20,6 +20,8 @@ try {
 
 Tokens are checked as GitHub checks them: a bearer token that the seed did not configure and the emulator did not issue (for example one issued before `reset()`) gets `401 Bad credentials`. Upstream emulate treats such a token as the default user; set `strict_scopes: false` in the seed to restore that. Private repositories answer `404` to callers who cannot see them.
 
+Issue dependencies follow GitHub's REST API: `GET`/`POST /repos/{owner}/{repo}/issues/{number}/dependencies/blocked_by`, `DELETE .../dependencies/blocked_by/{issue_id}` and `GET .../dependencies/blocking`, across repositories, with GitHub's 50-relationship limit. Issue objects carry `issue_dependencies_summary`.
+
 The default seed is synthetic. Configure `seed` and `tokens` for your tests. The instance provides `url`, `generatedSecrets`, `reset()`, and `close()`; tokens are resolved to seeded user IDs. Reset clears dynamic credentials and replays fixture state while preserving generated App keys.
 
 After installing the tarball, `npx github-emulator --help` lists CLI options. It listens on loopback port 4200 by default and accepts `--port`, `--host`, `--base-url`, and `--config` for JSON configuration.
