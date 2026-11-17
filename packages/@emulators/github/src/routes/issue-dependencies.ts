@@ -90,20 +90,14 @@ export function issueDependenciesRoutes({ app, store, baseUrl }: RouteContext): 
   });
 
   app.delete("/repos/:owner/:repo/issues/:issue_number/dependencies/blocked_by/:issue_id", (c) => {
-    // Removing an edge needs write on the blocked issue only: the far end may have become unreadable since.
     const { issue } = pathIssue(gh, c, "write");
-    const raw = c.req.param("issue_id")!;
-    if (!/^\d+$/.test(raw)) throw new ApiError(422, "Validation failed");
-    const blockingId = Number(raw);
+    // A far end the caller cannot read is not found, as in the lists: its status must not reveal the edge.
+    const blocking = issueById(gh, c.get("authUser"), c.req.param("issue_id"));
     const edge = gh.issueDependencies
       .findBy("blocked_issue_id", issue.id)
-      .find((candidate) => candidate.blocking_issue_id === blockingId);
-    const blocking = edge ? gh.issues.get(blockingId) : undefined;
-    if (!edge || !blocking) throw notFoundResponse();
+      .find((candidate) => candidate.blocking_issue_id === blocking.id);
+    if (!edge) throw notFoundResponse();
     gh.issueDependencies.delete(edge.id);
-    // Never serialize a far end the caller cannot read; the edge is still removed.
-    const blockingRepo = gh.repos.get(blocking.repo_id);
-    if (!blockingRepo || !canRead(gh, c.get("authUser"), blockingRepo)) return c.body(null, 204);
     return c.json(formatIssue(blocking, gh, baseUrl));
   });
 }

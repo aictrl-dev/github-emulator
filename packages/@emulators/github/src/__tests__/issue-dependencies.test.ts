@@ -164,17 +164,16 @@ describe("GitHub issue dependencies", () => {
     expect(summary).toEqual({ blocked_by: 0, blocking: 0, total_blocked_by: 0, total_blocking: 0 });
   });
 
-  it("removes an edge whose far end the caller can no longer read, and rejects a malformed id", async () => {
+  it("treats an edge to an issue the caller cannot read as not found, and rejects a malformed id", async () => {
     const blocked = await createIssue("octocat/alpha");
     const hidden = await createIssue("hubot/secret", "hubot-token");
     getGitHubStore(store).issueDependencies.insert({ blocked_issue_id: blocked.id, blocking_issue_id: hidden.id });
     const path = `/repos/octocat/alpha/issues/${blocked.number}/dependencies/blocked_by`;
     expect((await call(`${path}/not-a-number`, { method: "DELETE" })).status).toBe(422);
-    // The private far end is not serialized back to a caller who cannot read it.
-    const removed = await call(`${path}/${hidden.id}`, { method: "DELETE" });
-    expect(removed.status).toBe(204);
-    expect(await removed.text()).toBe("");
-    expect(getGitHubStore(store).issueDependencies.findBy("blocked_issue_id", blocked.id)).toEqual([]);
+    // Same status as an id with no edge at all, so a writer cannot probe for hidden blockers.
+    expect((await call(`${path}/${hidden.id}`, { method: "DELETE" })).status).toBe(404);
+    expect((await call(`${path}/999999`, { method: "DELETE" })).status).toBe(404);
+    expect(getGitHubStore(store).issueDependencies.findBy("blocked_issue_id", blocked.id)).toHaveLength(1);
   });
 
   it("requires authentication to add an edge", async () => {

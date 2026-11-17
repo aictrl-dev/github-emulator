@@ -9,6 +9,7 @@ import type { GitHubIssue, GitHubIssueEvent, GitHubLabel, GitHubRepo, GitHubUser
 import {
   findIssueForRepo,
   formatIssue,
+  formatIssueType,
   formatRepo,
   formatUser,
   generateNodeId,
@@ -444,6 +445,7 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
     const prevLabelIds = new Set(issue.label_ids);
     const prevAssigneeIds = new Set(issue.assignee_ids);
     const prevMilestoneId = issue.milestone_id;
+    const prevTypeId = issue.type_id ?? null;
 
     const updated = gh.issues.update(issue.id, patch);
     if (!updated) throw notFoundResponse();
@@ -635,6 +637,30 @@ export function issuesRoutes({ app, store, webhooks, baseUrl }: RouteContext): v
           );
         }
       }
+    }
+
+    // GitHub reports a type change as issues/typed (a type set or replaced) or issues/untyped (cleared).
+    const newTypeId = issue.type_id ?? null;
+    if ("type" in body && prevTypeId !== newTypeId) {
+      const event =
+        newTypeId === null ? "issue_type_removed" : prevTypeId === null ? "issue_type_added" : "issue_type_changed";
+      insertIssueEvent(gh, repo, issue.number, event, actor.id);
+      const action = newTypeId === null ? "untyped" : "typed";
+      const typeId = newTypeId ?? prevTypeId;
+      const type = typeId ? gh.issueTypes.get(typeId) : undefined;
+      webhooks.dispatch(
+        "issues",
+        action,
+        {
+          action,
+          issue: formatIssue(issue, gh, baseUrl)!,
+          type: type ? formatIssueType(type) : null,
+          repository: formatRepo(repo, gh, baseUrl),
+          sender: formatUser(actor, baseUrl),
+        },
+        ownerLogin,
+        repo.name,
+      );
     }
 
     const titleEdited = typeof body.title === "string" && body.title !== beforePatch.title;

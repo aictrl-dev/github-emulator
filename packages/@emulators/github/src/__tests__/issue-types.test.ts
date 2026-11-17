@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   Hono,
   Store,
@@ -9,6 +9,7 @@ import {
   type TokenMap,
 } from "@emulators/core";
 import { githubPlugin, seedFromConfig } from "../index.js";
+import { getGitHubStore } from "../store.js";
 
 const base = "http://localhost:4000";
 
@@ -21,11 +22,12 @@ function createTestApp() {
     ["admin-token", { login: "admin", id: 1, scopes: ["repo", "user", "read:org"] }],
     ["outsider-token", { login: "outsider", id: 2, scopes: ["repo", "user", "read:org"] }],
   ]);
+  const webhooks = new WebhookDispatcher();
   const app = new Hono();
   app.onError(createApiErrorHandler());
   app.use("*", createErrorHandler());
   app.use("*", authMiddleware(tokenMap));
-  githubPlugin.register(app as any, store, new WebhookDispatcher(), base, tokenMap);
+  githubPlugin.register(app as any, store, webhooks, base, tokenMap);
   githubPlugin.seed?.(store, base);
   seedFromConfig(store, base, {
     users: [{ login: "admin" }, { login: "outsider" }],
@@ -47,11 +49,33 @@ function createTestApp() {
       { owner: "admin", name: "personal" },
     ],
   });
-  return app;
+  // Installations on acme: one granted nothing, one granted issues read.
+  const acmeId = getGitHubStore(store).orgs.findOneBy("login", "acme")!.id;
+  for (const [token, permissions] of [
+    ["bare-installation-token", {}],
+    ["issues-installation-token", { issues: "read" }],
+  ] as const) {
+    tokenMap.set(token, {
+      login: "acme-app[bot]",
+      id: 9000,
+      scopes: [],
+      installation: {
+        installationId: 1,
+        appId: 1,
+        accountId: acmeId,
+        accountType: "Organization",
+        permissions,
+        repositoryIds: [],
+        repositorySelection: "all",
+      },
+    });
+  }
+  return { app, webhooks };
 }
 
 describe("GitHub issue types", () => {
   let app: Hono;
+  let webhooks: WebhookDispatcher;
   const call = (path: string, init: { method?: string; token?: string | null; body?: unknown } = {}) => {
     const headers: Record<string, string> = {};
     const token = init.token === undefined ? "admin-token" : init.token;
@@ -66,7 +90,7 @@ describe("GitHub issue types", () => {
   const names = async (res: Response) => ((await res.json()) as IssueType[]).map((type) => type.name);
 
   beforeEach(() => {
-    app = createTestApp();
+    ({ app, webhooks } = createTestApp());
   });
 
   it("seeds GitHub's default types, custom types or none per organization", async () => {
@@ -88,6 +112,43 @@ describe("GitHub issue types", () => {
     expect((await call("/orgs/acme/issue-types", { token: "outsider-token" })).status).toBe(404);
     expect((await call("/orgs/acme/issue-types", { token: null })).status).toBe(404);
     expect((await call("/orgs/missing/issue-types")).status).toBe(404);
+  });
+
+  it("lets an installation on the organization list its types only with issues or metadata read", async () => {
+    expect((await call("/orgs/acme/issue-types", { token: "bare-installation-token" })).status).toBe(403);
+    const granted = await call("/orgs/acme/issue-types", { token: "issues-installation-token" });
+    expect(await names(granted)).toEqual(["Task", "Bug", "Feature"]);
+    expect((await call("/orgs/custom/issue-types", { token: "issues-installation-token" })).status).toBe(404);
+  });
+
+  it("records a timeline event and sends issues typed or untyped when the type changes", async () => {
+    const dispatch = vi.spyOn(webhooks, "dispatch");
+    const issue = (await (
+      await call("/repos/acme/widget/issues", { method: "POST", body: { title: "Typed" } })
+    ).json()) as Issue;
+    const patch = (body: unknown) =>
+      call(`/repos/acme/widget/issues/${issue.number}`, { method: "PATCH", body: body as Record<string, unknown> });
+    await patch({ type: "Bug" });
+    await patch({ type: "Feature" });
+    await patch({ type: "Feature" });
+    await patch({ type: null });
+
+    const typeHooks = dispatch.mock.calls
+      .filter(([event, action]) => event === "issues" && (action === "typed" || action === "untyped"))
+      .map(([, action, payload]) => [action, (payload as { type: IssueType | null }).type?.name]);
+    expect(typeHooks).toEqual([
+      ["typed", "Bug"],
+      ["typed", "Feature"],
+      ["untyped", "Feature"],
+    ]);
+    const events = (await (await call(`/repos/acme/widget/issues/${issue.number}/events`)).json()) as {
+      event: string;
+    }[];
+    expect(events.map((e) => e.event).filter((e) => e.startsWith("issue_type"))).toEqual([
+      "issue_type_added",
+      "issue_type_changed",
+      "issue_type_removed",
+    ]);
   });
 
   it("sets, changes and clears an issue's type by name", async () => {
